@@ -1,5 +1,6 @@
 import { DurableObject } from 'cloudflare:workers';
 import { MAP_REVISION, MEADOW_SPAWN, containMeadow, meadowWaterPace } from './meadow-map.mjs';
+import { RPGWorld } from './rpg-server.mjs';
 
 const CAP=50, PROTOCOL=2, INPUT=54, STATE=55, PLAYER_BYTES=33;
 // These indices are the emote values in the browser's 33-byte player records.
@@ -15,6 +16,7 @@ const send=(ws,p)=>{try{ws.send(JSON.stringify(p));}catch{}};
 export class GameRoom extends DurableObject {
   constructor(ctx,env){
     super(ctx,env); this.players=new Map(); this.tickNumber=0; this.chatId=0; this.loop=null;
+    this.rpg=new RPGWorld(ctx.storage,this.players,packet=>this.broadcast(packet));
     // A restored socket only has its ID attached. Ask clients to rejoin for a fresh state.
     for(const ws of ctx.getWebSockets()) {
       try { ws.close(1012, 'Open Meadow restarted'); } catch {}
@@ -23,7 +25,7 @@ export class GameRoom extends DurableObject {
   startTicking(){
     if(this.loop===null) this.loop=setInterval(()=>this.tick(),50);
   }
-  roster(){return [...this.players.values()].filter(p=>p.joined).map(p=>({id:p.id,name:p.name,color:p.color,ranks:p.ranks,wins:p.wins||0}));}
+  roster(){return [...this.players.values()].filter(p=>p.joined).map(p=>({id:p.id,name:p.name,color:p.color,ranks:p.ranks,wins:p.wins||0,...(p.character?this.rpg.publicCharacter(p):{})}));}
   broadcast(data){const raw=JSON.stringify(data);for(const p of this.players.values())if(p.joined)try{p.ws.send(raw);}catch{}}
   async fetch(req){
     if(req.headers.get('Upgrade')?.toLowerCase()!=='websocket')return response({ok:true,protocol:PROTOCOL,capacity:CAP,players:this.roster().length,map:MAP_REVISION});
@@ -51,6 +53,7 @@ export class GameRoom extends DurableObject {
       for(let i=0;i<4;i++){
         const count=v.getUint16(14+i*2);if(count===p.actions[i])continue;
         p.actions[i]=count;
+        if(p.rpg)continue;
         if (p.emote) p.emote=p.emoteAge=p.emoteUntil=0;
         if(i===0){p.attack='slap';p.attackTime=.33;p.duration=.33;p.contactTime=.14;}
         if(i===1){p.attack='spit';p.attackTime=.48;p.duration=.48;p.contactTime=.2;}
@@ -59,6 +62,7 @@ export class GameRoom extends DurableObject {
       }
       return;
     }
+    if(raw.length>16000)return;
     let m;try{m=JSON.parse(raw);}catch{return;}if(!m||typeof m.t!=='string')return;
     if(m.t==='leave'){this.leave(ws);return;}
     if(m.t==='join'){
@@ -66,6 +70,12 @@ export class GameRoom extends DurableObject {
         send(ws,{t:'error',message:'Open Meadow has updated. Refresh the game to rejoin.'});this.leave(ws);return;
       }
       if(p.joined)return;
+      if(m.rpg===1){
+        if(this.roster().length>=CAP){send(ws,{t:'error',message:'Open Meadow is full.'});this.leave(ws);return;}
+        p.map=MAP_REVISION;
+        try{await this.rpg.enqueue(()=>this.rpg.join(p,m));if(this.players.get(id)!==p)return;send(ws,{t:'joined',id:p.id,x:p.x,z:p.z,map:MAP_REVISION,players:this.roster().length,roster:this.roster()});this.broadcast({t:'roster',players:this.roster().length,roster:this.roster()});}
+        catch(error){send(ws,{t:'error',message:error.message||'Character could not be loaded.'});this.leave(ws);}return;
+      }
       const browserKey = typeof m.browserKey === 'string' && /^[a-f0-9-]{16,64}$/.test(m.browserKey) ? m.browserKey : '';
       if (browserKey) {
         for (const other of [...this.players.values()]) {
@@ -86,8 +96,10 @@ export class GameRoom extends DurableObject {
       send(ws,{t:'joined',id:p.id,x:p.x,z:p.z,map:MAP_REVISION,players:this.roster().length,roster:this.roster()});
       this.broadcast({t:'roster',players:this.roster().length,roster:this.roster()});
     }else if(!p.joined)return;
+    else if(m.t.startsWith('rpg.')){await this.rpg.enqueue(()=>this.rpg.command(p,m));return;}
     else if(m.t==='ping'&&Number.isFinite(m.stamp))send(ws,{t:'pong',stamp:m.stamp});
     else if(m.t==='build'){
+      if(p.rpg)return;
       p.ranks=m.ranks&&typeof m.ranks==='object'?m.ranks:{};
       p.size=meadowSize(p.ranks);
       send(ws,{t:'build',ok:true});this.broadcast({t:'roster',players:this.roster().length,roster:this.roster()});
@@ -126,7 +138,7 @@ export class GameRoom extends DurableObject {
     if(!players.length)return;
     const dt=.05, factor=1-Math.exp(-19*dt), drag=Math.exp(-12.5*dt);this.tickNumber++;
     for(const p of players){
-      p.dash=Math.max(0,p.dash-dt);p.dashTime=Math.max(0,p.dashTime-dt);
+      p.dash=Math.max(0,p.dash-dt);p.dashTime=Math.max(0,p.dashTime-dt);p.air=Math.max(0,p.air-dt);
       p.attackTime=Math.max(0,p.attackTime-dt);if(!p.attackTime)p.attack='';
       if(p.emote){
         p.emoteAge+=dt;
@@ -134,7 +146,7 @@ export class GameRoom extends DurableObject {
       }
       const ix=p.ix||0,iz=p.iz||0,len=Math.max(1,Math.hypot(ix,iz));
       const expanded=p.map===MAP_REVISION;
-      const speed=7.35*(expanded?meadowWaterPace(p.x,p.z):1);
+      const speed=(p.rpg&&p.hp<=0?0:7.35)*(expanded?meadowWaterPace(p.x,p.z):1);
       const targetX=ix/len*speed,targetZ=iz/len*speed;
       p.vx+=(targetX-p.vx)*factor;p.vz+=(targetZ-p.vz)*factor;
       p.x+=(p.vx+p.kx)*dt;p.z+=(p.vz+p.kz)*dt;
@@ -143,6 +155,7 @@ export class GameRoom extends DurableObject {
       p.kx*=drag;p.kz*=drag;
       if(p.ready&&!p.attack)p.r=p.aim||0;
     }
+    if(this.tickNumber%2===0)void this.rpg.enqueue(()=>this.rpg.tick()).catch(()=>{});
     // Encode the common snapshot once. Each socket has its own acknowledgement.
     const data=new ArrayBuffer(12+players.length*PLAYER_BYTES),v=new DataView(data);
     v.setUint8(0,STATE);v.setUint8(1,PROTOCOL);v.setUint32(2,this.tickNumber);v.setUint8(10,players.length);v.setUint8(11,0);
@@ -180,12 +193,12 @@ export default {
   async fetch(req,env){
     const u=new URL(req.url),origin=req.headers.get('Origin');
     if(req.method==='OPTIONS')return new Response(null,{headers:cors});
-    if(u.pathname==='/health')return response({ok:true,service:'slimeoo-multiplayer',protocol:PROTOCOL,maxPlayers:CAP,map:MAP_REVISION});
-    if(origin&&!ALLOWED_ORIGINS.has(origin))return response({error:'origin_not_allowed',origin},403);
+    if(u.pathname==='/health')return response({ok:true,service:'slimeoo-multiplayer',protocol:PROTOCOL,maxPlayers:CAP,map:MAP_REVISION,rpg:1});
+    if(origin&&origin!==u.origin&&!ALLOWED_ORIGINS.has(origin)&&!/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin))return response({error:'origin_not_allowed',origin},403);
     if(u.pathname==='/api/room'||u.pathname==='/room'||u.pathname==='/room/OPEN-MEADOW'){
       if(!env.GAME_ROOM)return response({error:'GAME_ROOM binding missing'},503);
       const id=env.GAME_ROOM.idFromName('OPEN-MEADOW');return env.GAME_ROOM.get(id).fetch(req);
     }
-    return response({error:'not_found'},404);
+    return env.ASSETS?env.ASSETS.fetch(req):response({error:'not_found'},404);
   }
 };

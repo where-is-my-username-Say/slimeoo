@@ -1,0 +1,1 @@
+{"name":"slimeoo","version":"0.1.0","private":true,"type":"module","scripts":{"build":"node scripts/build.mjs","dev":"npm run build && wrangler dev --local --ip 0.0.0.0 --port 8787","test":"node --test test/*.test.mjs","deploy":"wrangler deploy"},"dependencies":{"three":"0.128.0"},"devDependencies":{"wrangler":"4.162.0"}}
