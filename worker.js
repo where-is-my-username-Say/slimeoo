@@ -19,7 +19,7 @@ export class GameRoom extends DurableObject {
   broadcast(data){const raw=JSON.stringify(data);for(const p of this.players.values())if(p.joined)try{p.ws.send(raw);}catch{}}
   async fetch(req){
     if(req.headers.get('Upgrade')?.toLowerCase()!=='websocket')return response({ok:true,protocol:PROTOCOL,capacity:CAP,players:this.roster().length});
-    if(this.players.size>=CAP)return response({error:'room_full',message:'Open Meadow is full.'},409);
+    if(this.roster().length>=CAP)return response({error:'room_full',message:'Open Meadow is full.'},409);
     const pair=new WebSocketPair(),[client,server]=Object.values(pair);
     const taken=new Set(this.players.keys()); let id=1;while(taken.has(id)&&id<=65535)id++;
     const p={id,name:'Slime',color:0,ranks:{},wins:0,joined:false,x:0,z:0,r:0,vx:0,vz:0,kx:0,kz:0,hp:100,en:0,seq:0,ready:false,actions:[0,0,0,0],attack:'',attackTime:0,duration:0,contactTime:0,dashTime:0,dash:0,air:0,stun:0,shield:0,emote:0,emoteAge:0,emoteUntil:0,chatAt:0};
@@ -47,12 +47,23 @@ export class GameRoom extends DurableObject {
       return;
     }
     let m;try{m=JSON.parse(raw);}catch{return;}if(!m||typeof m.t!=='string')return;
+    if(m.t==='leave'){this.leave(ws);return;}
     if(m.t==='join'){
       if(m.protocol!==PROTOCOL){send(ws,{t:'error',message:'Game and server protocol versions do not match.'});return;}
       if(p.joined)return;
+      const browserKey = typeof m.browserKey === 'string' && /^[a-f0-9-]{16,64}$/.test(m.browserKey) ? m.browserKey : '';
+      if (browserKey) {
+        for (const other of [...this.players.values()]) {
+          if (other.id !== p.id && other.browserKey === browserKey) {
+            send(other.ws,{t:'error',message:'This browser opened Open Meadow in another tab.'});
+            this.leave(other.ws);
+          }
+        }
+      }
+      p.browserKey = browserKey;
       p.joined=true;p.name=String(m.name||'Slime').slice(0,16);p.color=bounded(m.color|0,0,3);
       p.ranks=m.ranks&&typeof m.ranks==='object'?m.ranks:{};
-      p.x=(Math.random()-.5)*8;p.z=(Math.random()-.5)*8;
+      p.x=-24+(Math.random()-.5)*5;p.z=15+(Math.random()-.5)*5;
       send(ws,{t:'joined',id:p.id,players:this.roster().length,roster:this.roster()});
       this.broadcast({t:'roster',players:this.roster().length,roster:this.roster()});
     }else if(!p.joined)return;
@@ -64,6 +75,13 @@ export class GameRoom extends DurableObject {
       const now=Date.now();if(now-p.chatAt<750){send(ws,{t:'chatWait'});return;}
       const text=String(m.text||'').replace(/[\x00-\x1f\x7f]/g,' ').trim().slice(0,320);if(!text)return;
       p.chatAt=now;this.broadcast({t:'chat',id:++this.chatId,who:p.id,name:p.name,color:p.color,text});
+    }else if(m.t==='voiceSignal'){
+      const target=this.players.get(m.to);
+      if(!target?.joined||target.id===p.id||!m.data||typeof m.data!=='object')return;
+      const d=m.data;
+      if(!['offer','answer','ice','end'].includes(d.kind))return;
+      if(JSON.stringify(d).length>14000)return;
+      send(target.ws,{t:'voiceSignal',from:p.id,data:d});
     }else if(m.t==='emote'){
       const keys=['none','sit','wave','spin','bounce'];
       let key=String(m.key||'');if(key==='random')key=keys[1+Math.floor(Math.random()*4)];

@@ -746,6 +746,9 @@ select {
   width: max-content; max-width: 85vw; display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; justify-content: center;
   background: #1d3029dd; border: 1px solid #b4cf946d; border-radius: 5px; padding: 6px 10px; color: #eaf8d4; font-size: 11px;
 }
+#fieldMic { touch-action:none; user-select:none; -webkit-user-select:none; }
+#fieldMic.talking { background:#326e57 !important; color:white !important; box-shadow:0 0 0 2px #a5e8bd,0 0 15px #60b78c; }
+#fieldMic:disabled { opacity:.55; }
 #publicHud > div { display: flex; gap: 8px; align-items: center; }
 #fieldStatus { color: #c0dbb7; }
 #fieldStatus:empty { display: none; }
@@ -840,6 +843,11 @@ body.public-play #myName, body.public-play #theirName, .rival-tag { font-family:
 #publicHint { position: absolute; bottom: max(10px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%);
   color: #f4f4d8; font-size: 11px; white-space: nowrap; text-shadow: 0 1px 6px #192c25,0 0 9px #192c25; }
 body.public-play #pcHint, body.touch #publicHint { display: none; }
+/* Quick chat is independent from the room-chat history modal. */
+.quick-chat-bar:not([hidden]) { position:fixed; left:50%; bottom:max(72px,env(safe-area-inset-bottom)); transform:translateX(-50%); z-index:80; display:flex; align-items:center; gap:7px; width:min(540px,calc(100vw - 24px)); padding:8px; background:rgba(19,34,35,.95); border:1px solid rgba(205,236,211,.4); border-radius:15px; box-shadow:0 12px 36px #0008; backdrop-filter:blur(12px); }
+.quick-chat-bar input { flex:1; min-width:0; border-radius:9px; padding:11px 12px; color:#fff; background:#20383a; border:1px solid #58766a; font-size:16px; }
+.quick-chat-bar button { flex:none; min-width:43px; min-height:40px; border-radius:9px; }
+@media(max-height:480px) { .quick-chat-bar:not([hidden]) { bottom:max(8px,env(safe-area-inset-bottom)); width:min(440px,calc(100vw - 20px)); } }
 </style>
 </head>
 <body>
@@ -914,10 +922,16 @@ body.public-play #pcHint, body.touch #publicHint { display: none; }
   <nav id="duelMenu" aria-label="Duel controls">
     <button id="lock" aria-pressed="true" title="Toggle lock-on (R)">Lock on</button>
     <button id="invite">Invite</button><button id="addFriend">Save rival</button>
-    <button id="fieldChat" hidden title="Room chat (T or Enter)">Chat</button>
+    <button id="fieldChat" hidden title="View room chat (T)">Chat</button><button id="fieldMic" hidden title="Hold to talk in Open Meadow" aria-label="Hold to talk">Mic</button><button id="fieldQuickChat" hidden title="Type a message (Enter)">Type</button>
     <button id="fieldEmotes" hidden title="Emotes (B)">Emotes</button>
     <button id="fieldBuild" hidden>Build</button><button id="practiceAdjust" hidden>Practice setup</button><button id="battleSkills" hidden>Skills</button><button id="setBtn">Settings</button><button id="fs" title="Toggle fullscreen">Fullscreen</button><button id="quit">Leave</button>
   </nav>
+  <form id="quickChatBar" class="quick-chat-bar" hidden autocomplete="off">
+    <label class="sr-only" for="quickChatInput">Quick room message</label>
+    <input id="quickChatInput" type="text" dir="auto" maxlength="320" enterkeyhint="send" placeholder="Message everyone…" autocomplete="off">
+    <button type="submit" class="primary">Send</button>
+    <button type="button" id="quickChatCancel" aria-label="Close quick chat">×</button>
+  </form>
   <div id="publicHint" hidden></div>
   <div id="pcHint">WASD Move <span>·</span> J Slap <span>·</span> E Spit <span>·</span> Shift Dodge <span>·</span> Q Nova</div>
 </div>
@@ -937,7 +951,7 @@ body.public-play #pcHint, body.touch #publicHint { display: none; }
   <section class="modal" role="dialog" aria-modal="true" aria-labelledby="guideTitle">
     <h2 id="guideTitle">How to play</h2>
     <p>In Roguelike Run, win the most bouts and draft a skill after each one. You have 30 seconds, and the next bout starts when both players lock in. The first card is picked automatically at zero. Classic Duel is first to three wins. Lock-on keeps your rival in view. Drag to aim manually.</p>
-    <p>In Open Meadow, both players have to be inside the gold ring for attacks to deal damage. Chat with <kbd>T</kbd> or <kbd>Enter</kbd>, and open emotes with <kbd>B</kbd>.</p>
+    <p>In Open Meadow, both players have to be inside the gold ring for attacks to deal damage. View chat with <kbd>T</kbd>, or type instantly with <kbd>Enter</kbd>, and open emotes with <kbd>B</kbd>.</p>
     <dl class="guide">
       <div><dt>Move <kbd>WASD</kbd></dt><dd>Strafe or close the gap. Use the left joystick on touch.</dd></div>
       <div><dt>Slap <kbd>J</kbd> or click</dt><dd>Chain three close-range slaps to launch your rival. Time a slap to send their spit back.</dd></div>
@@ -1213,6 +1227,7 @@ function toast(message) {
 }
 function openOverlay(id) {
   if (activeOverlay === id) return;
+  if (id === 'setOverlay' && mode === 'public') suspendMeadow('settings');
   if (activeOverlay) closeOverlay(false);
   resetInputs();
   focusBeforeOverlay = document.activeElement;
@@ -1223,8 +1238,10 @@ function openOverlay(id) {
 }
 function closeOverlay(restoreFocus = true) {
   if (!activeOverlay) return;
+  const closed = activeOverlay;
   $(activeOverlay).hidden = true;
   activeOverlay = null;
+  if (closed === 'setOverlay' && mode === 'public') resumeMeadow();
   if (restoreFocus && focusBeforeOverlay?.getClientRects().length) focusBeforeOverlay.focus({ preventScroll: true });
 }
 function gameReady() {
@@ -1461,8 +1478,8 @@ const moves = {
 };
 
 /* Shared by the browser and the open-room server. */
-const MEADOW_X = 57;
-const MEADOW_Z = 42;
+const MEADOW_X = 90;
+const MEADOW_Z = 82;
 const meadowRocks = [
   { x: -12, z: -9.5, r: 1.65, height: 2.38 },
   { x: 15.2, z: 11.5, r: 1.76, height: 2.2 },
@@ -2210,11 +2227,11 @@ const foliageShader = mat => {
 };
 const meadowSun = new T.Vector3(-31, 49, -27);
 const romanSun = sun.position.clone();
-const meadowFog = new T.FogExp2(0xb6d5c6, .0058);
+const meadowFog = new T.FogExp2(0x9fb7aa, .0058);
 const romanFog = scene.fog;
-const groveHemi = new T.Color(0xf1ffec);
-const groveGroundLight = new T.Color(0x658879);
-const groveSunColor = new T.Color(0xffe9bc);
+const groveHemi = new T.Color(0xdbe8d7);
+const groveGroundLight = new T.Color(0x586d60);
+const groveSunColor = new T.Color(0xf4e2c6);
 const baseHemi = hemisphere.color.clone();
 const baseGroundLight = hemisphere.groundColor.clone();
 const baseSunColor = sun.color.clone();
@@ -2250,7 +2267,7 @@ const groveSky = addMesh(new T.SphereGeometry(198, 40, 22), new T.ShaderMaterial
 groveSky.renderOrder = -8;
 
 const meadowFloorTex = texture(1024, 1024, (c, w, h) => {
-  c.fillStyle = '#78985b';
+  c.fillStyle = '#688458';
   c.fillRect(0, 0, w, h);
   for (let i = 0; i < 1500; i++) {
     const x = meadowRand() * w, y = meadowRand() * h, r = 6 + meadowRand() * 65;
@@ -2276,7 +2293,7 @@ const meadowFloorTex = texture(1024, 1024, (c, w, h) => {
   c.ellipse(w / 2, h / 2, w * .233, h * .233, 0, 0, TAU);
   c.stroke();
 });
-const meadowFloor = addMesh(new T.PlaneGeometry(245, 222), standard(0xffffff, { map: meadowFloorTex, roughness: 1 }), groveRoot, 0, -.004, 0);
+const meadowFloor = addMesh(new T.PlaneGeometry(310, 290), standard(0xffffff, { map: meadowFloorTex, roughness: 1 }), groveRoot, 0, -.004, 0);
 meadowFloor.rotation.x = -Math.PI / 2;
 meadowFloor.receiveShadow = true;
 
@@ -2306,8 +2323,8 @@ for (let i = 0; i < 25; i++) {
   const a = (i + meadowRand() * .37) / 25 * TAU;
   fieldTrees.push({ x: Math.cos(a) * (51 + meadowRand() * 15), z: Math.sin(a) * (39 + meadowRand() * 14), s: .78 + meadowRand() * .7 });
 }
-const crownColors = [0x37785c, 0x408765, 0x51986b, 0x65a778, 0x75ac69, 0x7ab978, 0x8abb75, 0x9cc78b];
-const highlightLeaves = [0xa2c784, 0xc0d79c, 0x84bc84, 0x9dcf9a, 0x6fae79, 0x8cba82];
+const crownColors = [0x35654f, 0x3d7058, 0x4b8060, 0x5c9068, 0x67966a, 0x70a070, 0x80a678, 0x8bac82];
+const highlightLeaves = [0x8aaf7b, 0xa6be91, 0x77a77c, 0x8fb68d, 0x64966f, 0x78a17a];
 const woodColors = [0x65554b, 0x6e6254, 0x886c56, 0x87745d, 0x786351];
 const leafMesh = new T.IcosahedronGeometry(1, 2);
 const leafVertices = leafMesh.attributes.position;
@@ -2384,7 +2401,7 @@ function bladePatch() {
 }
 const grassMat = foliageShader(standard(0xffffff, { side: T.DoubleSide, roughness: 1, emissive: 0x375a2f, emissiveIntensity: .18 }));
 const grass = bladePatch();
-const meadowFlora = [0x719552, 0x8aaf67, 0x76a45e, 0xadc275, 0x88ad65, 0x689563, 0x96b56c, 0x548f67];
+const meadowFlora = [0x627f50, 0x79945e, 0x6b8c59, 0x93a66c, 0x789462, 0x5b7c5a, 0x829b66, 0x4d795f];
 const bloomColors = [0xe4e9ad, 0xffde83, 0xd4c3ee, 0xa2ddda, 0xeed0dc];
 const flowerStalk = new T.CylinderGeometry(.018, .032, 1, 5);
 const bloomGeo = new T.IcosahedronGeometry(.11, 0);
@@ -2466,6 +2483,129 @@ groveRoot.add(driftMeadow);
 function inMeadow() {
   return mode === 'lobby' || mode === 'public' || (mode === 'bot' && practiceOptions.arena === 'meadow');
 }
+
+// Low-cost stylized sunbeams (crepuscular rays). One static mesh; no volumetric ray marching.
+const meadowRays = new T.Group();
+groveRoot.add(meadowRays);
+{
+  const positions = [], colors = [];
+  const rayColor = new T.Color(0xffe8bd);
+  for (const [x, z, height, spread] of [[-25, 16, 9, 3.4], [-31, 7, 10, 3.1], [19, -24, 8, 2.7], [28, 18, 9, 3.0]]) {
+    for (let k = 0; k < 3; k++) {
+      const a = k * Math.PI * 2 / 3;
+      const dx = Math.cos(a) * spread, dz = Math.sin(a) * spread;
+      positions.push(x, height, z, x + dx - 3.2, .12, z + dz - 2.4, x - dx - 3.2, .12, z - dz - 2.4);
+      for (let j = 0; j < 3; j++) colors.push(rayColor.r, rayColor.g, rayColor.b);
+    }
+  }
+  const geo = new T.BufferGeometry();
+  geo.setAttribute('position', new T.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('color', new T.Float32BufferAttribute(colors, 3));
+  geo.computeVertexNormals();
+  const mesh = new T.Mesh(geo, new T.MeshBasicMaterial({
+    vertexColors: true, transparent: true, opacity: .052,
+    side: T.DoubleSide, depthWrite: false, blending: T.AdditiveBlending,
+    toneMapped: false
+  }));
+  mesh.frustumCulled = false;
+  meadowRays.add(mesh);
+}
+
+
+// Extra free-roam grove: one instanced canopy batch, no draw call per tree.
+{
+  const trunkGeo = new T.CylinderGeometry(.19,.34,3.4,5);
+  const crownGeo = new T.IcosahedronGeometry(1.9,0);
+  const trunks = new T.InstancedMesh(trunkGeo, standard(0x615344), 110);
+  const crowns = new T.InstancedMesh(crownGeo, foliageShader(standard(0x527e5e)), 110);
+  const dummy = new T.Object3D();
+  for(let i=0;i<110;i++){
+    const side = i%4, a=meadowRand(), b=meadowRand();
+    const x=side<2?(side===0?-1:1)*(43+a*40):(b-.5)*160;
+    const z=side>=2?(side===2?-1:1)*(33+a*42):(b-.5)*145;
+    dummy.position.set(x,1.7,z);dummy.rotation.set(0,b*6.28,0);dummy.scale.setScalar(.85+b*.5);dummy.updateMatrix();
+    trunks.setMatrixAt(i,dummy.matrix);
+    dummy.position.y=4.1;dummy.scale.setScalar(.9+b*.65);dummy.updateMatrix();
+    crowns.setMatrixAt(i,dummy.matrix);
+    crowns.setColorAt(i,new T.Color().setHSL(.31+b*.06,.24,.28+b*.1));
+  }
+  trunks.instanceMatrix.needsUpdate=true;crowns.instanceMatrix.needsUpdate=true;
+  groveRoot.add(trunks,crowns);
+}
+// Water with transparent layered surface, shoreline and subtle shader ripple.
+// The fish are simple colored shapes below the surface, not detailed 3D models.
+const pondLife=[];
+for(const [cx,cz,rx,rz] of [[-50,-31,12,8],[47,39,14,10],[52,-39,9,7]]){
+  const rim=addMesh(new T.CircleGeometry(1,48),standard(0x7c8b70,{roughness:1}),groveRoot,cx,.012,cz);
+  rim.rotation.x=-Math.PI/2;rim.scale.set(rx*1.12,rz*1.12,1);
+  const bed=addMesh(new T.CircleGeometry(1,48),standard(0x315c54,{roughness:1}),groveRoot,cx,.016,cz);
+  bed.rotation.x=-Math.PI/2;bed.scale.set(rx,rz,1);
+  const waterMat=new T.MeshPhysicalMaterial({
+    color:0x4a9d91,transparent:true,opacity:.70,roughness:.18,metalness:0,
+    clearcoat:.65,clearcoatRoughness:.12,depthWrite:false,side:T.DoubleSide
+  });
+  const water=addMesh(new T.CircleGeometry(1,48),waterMat,groveRoot,cx,.055,cz);
+  water.rotation.x=-Math.PI/2;water.scale.set(rx*.97,rz*.97,1);
+  const ripples=[];
+  for(let j=0;j<3;j++){
+    const r=addMesh(new T.RingGeometry(.65+j*.95,.69+j*.95,36),
+      new T.MeshBasicMaterial({color:0xc7e8d8,transparent:true,opacity:.17,depthWrite:false,side:T.DoubleSide}),
+      groveRoot,cx+(j-1)*rx*.22,.068,cz+(j-1)*rz*.17);
+    r.rotation.x=-Math.PI/2;r.scale.set(1,.75,1);ripples.push(r);
+  }
+  for(let j=0;j<7;j++){
+    const fish=new T.Group();
+    const body=new T.Mesh(new T.PlaneGeometry(.7,.23),new T.MeshBasicMaterial({
+      color:[0xf4bc77,0xdee4c1,0xe29a7d,0x8eb7ab][j%4],side:T.DoubleSide,depthWrite:false
+    }));
+    body.rotation.x=-Math.PI/2;fish.add(body);
+    const tail=new T.Mesh(new T.BufferGeometry(),body.material);
+    // Fish tail drawn as a simple triangular fin
+    tail.geometry.setAttribute('position',new T.Float32BufferAttribute([-.34,0,0,-.7,0,.18,-.7,0,-.18],3));
+    fish.add(tail);groveRoot.add(fish);
+    pondLife.push({fish,cx,cz,rx,rz,j,phase:meadowRand()*6.28,ripples:j===0?ripples:null});
+  }
+}
+// Wind streaks and flat butterfly sprites share two batched BufferGeometries.
+const breezeCount=72,butterflyCount=30;
+const breezeGeo=new T.BufferGeometry(),butterflyGeo=new T.BufferGeometry();
+breezeGeo.setAttribute('position',new T.BufferAttribute(new Float32Array(breezeCount*6),3));
+butterflyGeo.setAttribute('position',new T.BufferAttribute(new Float32Array(butterflyCount*9),3));
+const breeze=new T.LineSegments(breezeGeo,new T.LineBasicMaterial({
+  color:0xd4eee0,transparent:true,opacity:.19,depthWrite:false
+}));
+const butterflies=new T.Mesh(butterflyGeo,new T.MeshBasicMaterial({
+  color:0xffd8a5,side:T.DoubleSide,transparent:true,opacity:.84,depthWrite:false
+}));
+breeze.frustumCulled=false;butterflies.frustumCulled=false;
+groveRoot.add(breeze,butterflies);
+let groveAmbientFrame=0;
+function animateGroveAmbient(time){
+  if(!groveRoot.visible)return;
+  // Animate at 20fps max, skip expensive decorative work on low quality.
+  if(settings.quality===0||settings.reduced){breeze.visible=false;butterflies.visible=false;return;}
+  breeze.visible=butterflies.visible=true;
+  if(++groveAmbientFrame%3!==0)return;
+  const bp=breezeGeo.attributes.position,fp=butterflyGeo.attributes.position;
+  for(let i=0;i<breezeCount;i++){
+    const t=time*.8+i*7.3,x=((i*17.93+t*6)%166)-83,z=((i*11.37+t*2)%148)-74,y=.9+(i%8)*.37;
+    bp.setXYZ(i*2,x,y,z);bp.setXYZ(i*2+1,x+(.7+i%4*.3),y+.04,z+.13);
+  }
+  for(let i=0;i<butterflyCount;i++){
+    const t=time*.55+i*2.4,x=Math.sin(t*.4+i*7.1)*68,z=Math.cos(t*.3+i*3.9)*61;
+    const y=1.1+Math.sin(t*1.7+i)*.55+(i%4)*.25,flap=Math.abs(Math.sin(time*9+i));
+    fp.setXYZ(i*3,x,y,z);fp.setXYZ(i*3+1,x-.18,y+.13*flap,z+.08);
+    fp.setXYZ(i*3+2,x+.18,y+.13*flap,z+.08);
+  }
+  bp.needsUpdate=true;fp.needsUpdate=true;
+  for(const p of pondLife){
+    const t=time*.7+p.phase;
+    p.fish.position.set(p.cx+Math.cos(t)*p.rx*.56,.043,p.cz+Math.sin(t)*p.rz*.56);
+    p.fish.rotation.y=-t;
+    if(p.ripples)for(let i=0;i<p.ripples.length;i++)p.ripples[i].material.opacity=.09+.08*Math.sin(time*1.4+i);
+  }
+}
+
 const meadowBounds = { x: MEADOW_X, z: MEADOW_Z };
 const romanBounds = { x: ARENA_X, z: ARENA_Z };
 function arenaSize() { return inMeadow() ? meadowBounds : romanBounds; }
@@ -2475,17 +2615,18 @@ function showEnvironment() {
   activeEnvironment = name;
   const meadow = name === 'meadow';
   groveRoot.visible = meadow;
+  meadowRays.visible = meadow && settings.quality > 0 && !settings.reduced;
   for (const mesh of romanSet) mesh.visible = !meadow;
   scene.fog = meadow ? meadowFog : romanFog;
-  scene.background.setHex(meadow ? 0xb7d6c5 : 0x594052);
+  scene.background.setHex(meadow ? 0x9fb7aa : 0x594052);
   hemisphere.color.copy(meadow ? groveHemi : baseHemi);
   hemisphere.groundColor.copy(meadow ? groveGroundLight : baseGroundLight);
-  hemisphere.intensity = meadow ? 1.03 : .83;
+  hemisphere.intensity = meadow ? .86 : .83;
   sun.color.copy(meadow ? groveSunColor : baseSunColor);
   sun.position.copy(meadow ? meadowSun : romanSun);
-  sun.intensity = meadow ? 1.46 : 1.53;
+  sun.intensity = meadow ? 1.28 : 1.53;
   rim.intensity = meadow ? .42 : .66;
-  renderer.toneMappingExposure = meadow ? .99 : 1.05;
+  renderer.toneMappingExposure = meadow ? .91 : 1.05;
   sun.shadow.camera.left = meadow ? -57 : -36;
   sun.shadow.camera.right = meadow ? 57 : 36;
   sun.shadow.camera.top = meadow ? 49 : 30;
@@ -2495,9 +2636,12 @@ function showEnvironment() {
   document.body.classList.toggle('meadow', meadow);
 }
 function animateMeadow(time) {
+  animateGroveAmbient(time);
   foliageTime.value = settings.reduced ? 0 : time;
   for (const [i, glow] of groveLanterns.entries()) glow.material.opacity = .30 + Math.sin(time * 3 + i) * .065;
   const attribute = driftMeadowGeo.attributes.position;
+  if (settings.quality === 0 || settings.reduced) { driftMeadow.visible = false; return; }
+  driftMeadow.visible = true;
   for (const [i, [x, y, z, p]] of groveDrift.entries()) {
     attribute.setXYZ(i, x + Math.sin(time * .41 + p) * 3, y + Math.sin(time * .62 + p) * .56, z + Math.cos(time * .33 + p) * 2.3);
   }
@@ -4611,6 +4755,7 @@ function repeatInput() {
 const KEY_ACTION = { j: 'slap', ' ': 'slap', e: 'spit', q: 'nova', shift: 'dash' };
 const MOVE_KEYS = ['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'];
 addEventListener('keydown', event => {
+  if (event.key === 'Escape' && !$('quickChatBar').hidden) { closeQuickChat(); event.preventDefault(); return; }
   if (event.key === 'Escape' && activeOverlay) {
     if (activeOverlay === 'buildOverlay') finishBuild(false); else closeOverlay();
     event.preventDefault();
@@ -4627,7 +4772,7 @@ addEventListener('keydown', event => {
     }
     return;
   }
-  if (mode === 'lobby' || activeOverlay || event.target.matches?.('input, textarea, select, [contenteditable]')) return;
+  if (!$('quickChatBar').hidden || mode === 'lobby' || activeOverlay || event.target.matches?.('input, textarea, select, [contenteditable]')) return;
   if (publicSocialKey(event)) return;
   if (state.phase === 'draft') {
     draftKeys(event);
@@ -6396,6 +6541,32 @@ function finishBuild(save) {
   }
 }
 
+// Stable browser identity prevents duplicate public-room slots across tabs.
+const meadowBrowserKey = (() => {
+  try {
+    let key = localStorage.getItem('slimeoo_meadow_browser_key');
+    if (!key || !/^[a-f0-9-]{16,64}$/.test(key)) {
+      key = crypto.randomUUID();
+      localStorage.setItem('slimeoo_meadow_browser_key', key);
+    }
+    return key;
+  } catch { return crypto.randomUUID(); }
+})();
+let meadowSuspended = false;
+let meadowRejoining = false;
+function suspendMeadow(reason = '') {
+  if (mode !== 'public') return;
+  meadowSuspended = true;
+  disconnectRoom();
+  if (reason === 'settings') setText($('fieldCount'), 'Paused');
+}
+function resumeMeadow() {
+  if (mode !== 'public' || !meadowSuspended || document.hidden || activeOverlay || meadowRejoining) return;
+  meadowSuspended = false;
+  meadowRejoining = true;
+  openPublicConnection();
+  meadowRejoining = false;
+}
 const publicRoom = {
   ws: null, id: 0, target: 0, locked: false, count: null, sequence: 0, lastSend: 0, lastTick: -1,
   updated: 0, roster: new Map(), frames: [], prediction: null, history: [], preview: null, events: [],
@@ -6425,12 +6596,16 @@ async function checkRoom() {
   }
 }
 function disconnectRoom() {
+  stopRoomVoice(true);
   const room = publicRoom;
   room.entry++;
   clearTimeout(room.timeout);
   const ws = room.ws;
   room.ws = null;
-  if (ws && ws.readyState < 2) ws.close();
+  if (ws && ws.readyState < 2) {
+    if (ws.readyState === 1) try { ws.send(JSON.stringify({t:'leave'})); } catch {}
+    ws.close(1000, 'Left public meadow');
+  }
   clearRoomBatches();
   for (const el of room.labels.values()) el.remove();
   room.models.clear();
@@ -6444,13 +6619,117 @@ function disconnectRoom() {
   room.warnedSnapshot = false;
   clearRoomSocial();
   document.body.classList.remove('public-play', 'hangout');
-  $('fieldChat').hidden = $('fieldEmotes').hidden = $('publicHint').hidden = true;
+  $('fieldChat').hidden = $('fieldQuickChat').hidden = $('fieldMic').hidden = $('fieldEmotes').hidden = $('publicHint').hidden = true;
+  closeQuickChat();
   $('aSpit').disabled = $('aNova').disabled = false;
   setText($('slapActionLabel'), 'Slap');
   $('publicHud').hidden = true;
   $('playerLabels').replaceChildren();
 }
+
+// Room-only push-to-talk. Audio is WebRTC peer-to-peer; the Worker relays
+// signaling only. A maximum of four nearby listeners prevents 50-way mesh load.
+const roomVoice = {stream:null,peers:new Map(),held:false,starting:false};
+const voiceIce = {iceServers:[{urls:'stun:stun.l.google.com:19302'}]};
+function voiceSend(to,data){
+  const ws=publicRoom.ws;
+  if(ws?.readyState===1&&publicRoom.id)ws.send(JSON.stringify({t:'voiceSignal',to,data}));
+}
+function voicePeer(id){
+  if(roomVoice.peers.has(id))return roomVoice.peers.get(id);
+  const pc=new RTCPeerConnection(voiceIce);
+  roomVoice.peers.set(id,pc);
+  pc.onicecandidate=e=>{if(e.candidate)voiceSend(id,{kind:'ice',candidate:e.candidate.toJSON()});};
+  pc.ontrack=e=>{
+    let audio=pc._voiceAudio;
+    if(!audio){audio=document.createElement('audio');audio.autoplay=true;audio.playsInline=true;pc._voiceAudio=audio;}
+    audio.srcObject=e.streams[0]||new MediaStream([e.track]);
+    audio.play().catch(()=>{});
+  };
+  pc.onconnectionstatechange=()=>{
+    if(['closed','failed','disconnected'].includes(pc.connectionState)){
+      pc._voiceAudio?.remove();pc.close();roomVoice.peers.delete(id);
+    }
+  };
+  return pc;
+}
+async function handleRoomVoiceSignal(packet){
+  if(mode!=='public'||!publicRoom.id||!Number.isInteger(packet.from)||packet.from===publicRoom.id)return;
+  const id=packet.from,data=packet.data;
+  if(!data||typeof data!=='object')return;
+  try{
+    if(data.kind==='offer'){
+      const pc=voicePeer(id);
+      await pc.setRemoteDescription({type:'offer',sdp:data.sdp});
+      await pc.setLocalDescription(await pc.createAnswer());
+      voiceSend(id,{kind:'answer',sdp:pc.localDescription.sdp});
+    }else if(data.kind==='answer'){
+      const pc=roomVoice.peers.get(id);
+      if(pc?.signalingState==='have-local-offer')await pc.setRemoteDescription({type:'answer',sdp:data.sdp});
+    }else if(data.kind==='ice'){
+      const pc=roomVoice.peers.get(id);
+      if(pc?.remoteDescription)await pc.addIceCandidate(data.candidate);
+    }else if(data.kind==='end'){
+      const pc=roomVoice.peers.get(id);
+      if(pc){pc.close();pc._voiceAudio?.remove();roomVoice.peers.delete(id);}
+    }
+  }catch(e){console.warn('Voice connection:',e);}
+}
+async function startRoomVoice(event){
+  event?.preventDefault();
+  if(mode!=='public'||!publicRoom.id||roomVoice.held||roomVoice.starting)return;
+  roomVoice.starting=true;
+  const btn=$('fieldMic');
+  try{
+    if(!navigator.mediaDevices?.getUserMedia)throw Error('Microphone requires HTTPS and browser permission.');
+    const stream=await navigator.mediaDevices.getUserMedia({audio:{
+      echoCancellation:true,noiseSuppression:true,autoGainControl:true
+    },video:false});
+    if(mode!=='public'){stream.getTracks().forEach(t=>t.stop());return;}
+    roomVoice.stream=stream;roomVoice.held=true;btn.classList.add('talking');setText(btn,'Talking');
+    // Prefer nearby listeners, with a strict four-peer ceiling.
+    const latest=publicRoom.frames.at(-1)?.poses;
+    const own=latest?.get(publicRoom.id);
+    const candidates=[...publicRoom.roster.keys()].filter(id=>id!==publicRoom.id)
+      .map(id=>({id,dist:own&&latest?.get(id)?
+        Math.hypot(own.x-latest.get(id).x,own.z-latest.get(id).z):1e6}))
+      .sort((a,b)=>a.dist-b.dist).slice(0,4);
+    for(const {id} of candidates){
+      if(!roomVoice.held)break;
+      const pc=voicePeer(id);
+      stream.getTracks().forEach(track=>pc.addTrack(track,stream));
+      await pc.setLocalDescription(await pc.createOffer());
+      voiceSend(id,{kind:'offer',sdp:pc.localDescription.sdp});
+    }
+  }catch(e){toast('Microphone unavailable: '+(e?.message||'permission denied'));stopRoomVoice();}
+  finally{roomVoice.starting=false;}
+}
+function stopRoomVoice(all=false){
+  roomVoice.held=false;
+  roomVoice.stream?.getTracks().forEach(t=>t.stop());
+  roomVoice.stream=null;
+  const btn=$('fieldMic');btn?.classList.remove('talking');
+  if(btn)setText(btn,'Mic');
+  for(const [id,pc] of roomVoice.peers){
+    if(all||pc.getSenders().some(sender=>sender.track)){
+      voiceSend(id,{kind:'end'});pc.close();pc._voiceAudio?.remove();roomVoice.peers.delete(id);
+    }
+  }
+}
+{
+  const btn=$('fieldMic');
+  btn.addEventListener('pointerdown',e=>{
+    e.preventDefault();try{btn.setPointerCapture(e.pointerId);}catch{}
+    startRoomVoice(e);
+  });
+  for(const type of ['pointerup','pointercancel','lostpointercapture'])
+    btn.addEventListener(type,()=>stopRoomVoice());
+  window.addEventListener('blur',()=>stopRoomVoice());
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)stopRoomVoice();});
+}
+
 function openPublicConnection() {
+  if (mode !== 'public' || document.hidden || meadowSuspended) return;
   const room = publicRoom;
   const path = new URL('/room/OPEN-MEADOW', roomOrigin);
   path.protocol = path.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -6464,7 +6743,7 @@ function openPublicConnection() {
   }, 6300);
   ws.addEventListener('open', () => {
     if (room.ws !== ws) return;
-    ws.send(JSON.stringify({ t: 'join', protocol: MEADOW_PROTOCOL, name: profile.name, color: chosen, ranks: cleanBuild(readStore('slimeMeadowRoomBuild', practiceOptions.ranks)) }));
+    ws.send(JSON.stringify({ t: 'join', protocol: MEADOW_PROTOCOL, browserKey: meadowBrowserKey, name: profile.name, color: chosen, ranks: cleanBuild(readStore('slimeMeadowRoomBuild', practiceOptions.ranks)) }));
   });
   ws.addEventListener('message', event => {
     if (room.ws !== ws) return;
@@ -6483,7 +6762,8 @@ function openPublicConnection() {
         room.id = packet.id;
         // Begin local prediction immediately. Waiting for the first binary snapshot
         // used to disable both the movement loop and subsequent input transmissions.
-        const initial = state.p[0];
+        const initial = { ...state.p[0], x: -24, z: 15, r: .7 };
+        state.p[0] = { ...initial, active: true };
         room.prediction = { ...initial, active: true, hp: 100, en: 0,
           attack: '', attackTime: 0, stun: 0, dashTime: 0, dash: 0,
           kx: 0, kz: 0, vx: 0, vz: 0, predictedDash: 0,
@@ -6491,6 +6771,7 @@ function openPublicConnection() {
         room.updated = performance.now();
         room.locked = settings.autoLock;
         state.phase = 'fight';
+        state.paused = false;
         $('publicHud').hidden = false;
         view.fresh = true;
         toast('You joined Open Meadow');
@@ -6524,6 +6805,8 @@ function openPublicConnection() {
         room.events.push(q);
       }
       if (room.events.length > 200) room.events.splice(0, room.events.length - 200);
+    } else if (packet.t === 'voiceSignal') {
+      handleRoomVoiceSignal(packet);
     } else if (packet.t === 'chat') {
       receiveRoomChat(packet);
     } else if (packet.t === 'chatWait') {
@@ -6584,6 +6867,7 @@ function receiveRoomState(packet) {
     view.fresh = true;
   }
   room.prediction = simulated;
+  state.p[0] = { ...simulated, active: true };
   if (current.hp > 0) room.lastKo = null;
   state.p[0] = authoritative;
 }
@@ -6728,7 +7012,7 @@ function animatePublic(dt, time) {
   // Keep transmitting input even if an authoritative state packet is missing.
   // Otherwise a lost first snapshot permanently freezes the player.
   if (!room.prediction) {
-    room.prediction = { ...state.p[0], active: true, hp: 100, en: 0,
+    room.prediction = { ...state.p[0], x: -24, z: 15, active: true, hp: 100, en: 0,
       attack: '', attackTime: 0, stun: 0, dashTime: 0, dash: 0,
       kx: 0, kz: 0, vx: 0, vz: 0, predictedDash: 0,
       dashInput: inputCounts.dash };
@@ -6749,6 +7033,7 @@ function animatePublic(dt, time) {
     room.history.push({ sequence: room.sequence + 1, input, dt: step });
     if (room.history.length > 40) room.history.shift();
   }
+  state.p[0] = { ...p, active: true };
   sendRoomInput();
   const last = room.frames.at(-1);
   if (!last && now - room.updated > 3500 && !room.warnedSnapshot) {
@@ -6820,7 +7105,7 @@ function updateSocialControls() {
   const joined = mode === 'public' && publicRoom.id !== 0;
   const fighting = joined && roomCanFight();
   document.body.classList.toggle('hangout', joined && !fighting);
-  $('fieldChat').hidden = !joined;
+  $('fieldChat').hidden = $('fieldQuickChat').hidden = $('fieldMic').hidden = !joined;
   $('fieldEmotes').hidden = !joined;
   setText($('fieldZone'), joined ? fighting ? 'Fight ring · Damage on' : 'Hangout · Damage off' : '');
   const zone = $('fieldZone');
@@ -6833,8 +7118,8 @@ function updateSocialControls() {
   $('publicHint').hidden = !joined;
   if (joined) {
     const hint = $('publicHint');
-    setText(hint, fighting ? 'J Slap  ·  E Spit  ·  Shift Dodge  ·  Q Nova  ·  T Chat  ·  B Emotes' :
-      'WASD Move  ·  J Play slap  ·  T Chat  ·  B Emotes');
+    setText(hint, fighting ? 'J Slap  ·  E Spit  ·  Shift Dodge  ·  Q Nova  ·  T History  ·  Enter Type  ·  B Emotes' :
+      'WASD Move  ·  J Play slap  ·  T History  ·  Enter Type  ·  B Emotes');
   }
 }
 function updateUnread() {
@@ -6845,11 +7130,36 @@ function clearRoomSocial() {
   roomBubbles.clear();
   $('roomChatLog').replaceChildren();
   $('roomChatInput').value = '';
+  $('quickChatInput').value = '';
+  closeQuickChat();
   setText($('roomChatStatus'), '');
   roomChatUnread = 0;
   lastChatId = 0;
   roomEmoteRequest = -Infinity;
   updateUnread();
+}
+function closeQuickChat() {
+  const bar = $('quickChatBar');
+  if (!bar) return;
+  bar.hidden = true;
+  if (document.activeElement === $('quickChatInput')) $('quickChatInput').blur();
+}
+function openQuickChat() {
+  if (mode !== 'public' || !publicRoom.id || activeOverlay) return;
+  resetInputs();
+  $('quickChatBar').hidden = false;
+  const input = $('quickChatInput');
+  input.focus({ preventScroll: true });
+}
+function sendQuickChat(event) {
+  event.preventDefault();
+  const input = $('quickChatInput');
+  const text = cleanRoomChat(input.value);
+  if (!text) { closeQuickChat(); return; }
+  if (publicRoom.ws?.readyState !== 1 || !publicRoom.id) { toast('Chat is disconnected'); return; }
+  publicRoom.ws.send(JSON.stringify({ t: 'chat', text }));
+  input.value = '';
+  closeQuickChat();
 }
 function openRoomChat() {
   if (mode !== 'public' || !publicRoom.id) return;
@@ -6949,6 +7259,9 @@ function sendRoomEmote(key) {
 }
 function prepareSocialControls() {
   $('fieldChat').onclick = openRoomChat;
+  $('fieldQuickChat').onclick = openQuickChat;
+  $('quickChatBar').onsubmit = sendQuickChat;
+  $('quickChatCancel').onclick = closeQuickChat;
   $('fieldEmotes').onclick = openRoomEmotes;
   $('roomChatForm').onsubmit = sendRoomChat;
   const options = [...ROOM_EMOTES.slice(1), { key: 'playSlap', label: 'Play slap' },
@@ -6965,8 +7278,10 @@ function prepareSocialControls() {
 function publicSocialKey(event) {
   if (mode !== 'public' || !publicRoom.id || event.repeat || event.ctrlKey || event.metaKey || event.altKey || event.isComposing) return false;
   const key = event.key.toLowerCase();
-  if (key === 't' || key === 'enter' && !event.target.closest?.('button')) {
+  if (key === 't') {
     openRoomChat();
+  } else if (key === 'enter' && !event.target.closest?.('button')) {
+    openQuickChat();
   } else if (key === 'b') {
     openRoomEmotes();
   } else return false;
@@ -7005,7 +7320,7 @@ function clearPeer() {
   currentPeer?.destroy();
 }
 function leave(message = '') {
-  if (mode === 'public' || publicRoom.ws) disconnectRoom();
+  if (mode === 'public' || publicRoom.ws) { meadowSuspended = false; disconnectRoom(); }
   send({ t: 'leave' });
   clearPeer();
   entryNonce++;
@@ -7383,6 +7698,7 @@ function enter(type, code, format = lobbyFormat) {
   stopFastChannel();
   state = freshMatch(type === 'guest' || type === 'public' ? 'classic' : format);
   state.p[localSlot] = freshPlayer(localSlot, { active: true, name: profile.name, color: chosen });
+  if (type === 'public') Object.assign(state.p[0], { x: -24, z: 15, r: .7 });
   state.p[1 - localSlot].active = false;
   inputs = [neutralInput(), neutralInput()];
   inputs[localSlot].a = { ...inputCounts };
@@ -7526,18 +7842,19 @@ renderer.domElement.addEventListener('webglcontextrestored', () => {
 document.addEventListener('visibilitychange', () => {
   resetInputs();
   refreshAudio();
-  if (document.hidden && mode === 'public') sendRoomInput(true);
+  if (document.hidden && mode === 'public') suspendMeadow('hidden');
+  else if (!document.hidden && mode === 'public') resumeMeadow();
   else if (document.hidden) tickNet(performance.now(), true);
   else {
     lastRemote = lastSnapshot = performance.now();
-    if (mode === 'public') sendRoomInput(true);
+    if (mode === 'public' && !meadowSuspended) sendRoomInput(true);
     previous = performance.now();
     accumulator = 0;
   }
 });
 addEventListener('pagehide', event => {
   if (!event.persisted) {
-    if (mode === 'public') disconnectRoom();
+    if (mode === 'public') suspendMeadow('pagehide');
     send({ t: 'leave' });
     clearPeer();
   }
