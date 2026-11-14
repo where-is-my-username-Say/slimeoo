@@ -1266,6 +1266,7 @@ function buildSettings() {
         input.checked = settings[key];
         input.onchange = () => {
           settings[key] = input.checked;
+          if (key === 'adaptive') meadowAdaptiveChoice = input.checked;
           saveSettings(key);
         };
       } else {
@@ -2171,7 +2172,7 @@ const romanSet = scene.children.filter(o => !o.isLight);
 let flagUpdateAt = -Infinity;
 function animateArena(time, dt) {
   showEnvironment();
-  if (inMeadow()) { animateMeadow(time); return; }
+  if (inMeadow()) { if (!openMeadowActive()) animateMeadow(time); return; }
   crowdUniform.time.value = settings.crowd ? time : 0;
   crowdUniform.cheer.value = Math.max(0, crowdUniform.cheer.value - dt * .68);
   if (settings.quality > 0 && time - flagUpdateAt >= 1 / 36) {
@@ -2236,6 +2237,19 @@ const baseHemi = hemisphere.color.clone();
 const baseGroundLight = hemisphere.groundColor.clone();
 const baseSunColor = sun.color.clone();
 let activeEnvironment = '';
+let meadowWorld = null, meadowMap = null, meadowLoading = null;
+let meadowQualityLimit = 2, meadowAdaptiveChoice = stored.adaptive;
+function openMeadowActive() { return mode === 'public' && meadowWorld !== null; }
+function loadMeadowWorld() {
+  if (meadowWorld) return Promise.resolve();
+  if (!meadowLoading) meadowLoading = import('./meadow-world.mjs').then(map => {
+    meadowWorld = map.createMeadow(T, renderer, sun);
+    meadowMap = map;
+    scene.add(meadowWorld.root);
+  }).finally(() => { meadowLoading = null; });
+  return meadowLoading;
+}
+function meadowQuality() { return Math.min(settings.quality, meadowQualityLimit); }
 
 function groveBatch(geometry, material, transforms, cast = false) {
   const mesh = instances(geometry, material, transforms, cast);
@@ -2484,159 +2498,60 @@ function inMeadow() {
   return mode === 'lobby' || mode === 'public' || (mode === 'bot' && practiceOptions.arena === 'meadow');
 }
 
-// Low-cost stylized sunbeams (crepuscular rays). One static mesh; no volumetric ray marching.
-const meadowRays = new T.Group();
-groveRoot.add(meadowRays);
-{
-  const positions = [], colors = [];
-  const rayColor = new T.Color(0xffe8bd);
-  for (const [x, z, height, spread] of [[-25, 16, 9, 3.4], [-31, 7, 10, 3.1], [19, -24, 8, 2.7], [28, 18, 9, 3.0]]) {
-    for (let k = 0; k < 3; k++) {
-      const a = k * Math.PI * 2 / 3;
-      const dx = Math.cos(a) * spread, dz = Math.sin(a) * spread;
-      positions.push(x, height, z, x + dx - 3.2, .12, z + dz - 2.4, x - dx - 3.2, .12, z - dz - 2.4);
-      for (let j = 0; j < 3; j++) colors.push(rayColor.r, rayColor.g, rayColor.b);
-    }
-  }
-  const geo = new T.BufferGeometry();
-  geo.setAttribute('position', new T.Float32BufferAttribute(positions, 3));
-  geo.setAttribute('color', new T.Float32BufferAttribute(colors, 3));
-  geo.computeVertexNormals();
-  const mesh = new T.Mesh(geo, new T.MeshBasicMaterial({
-    vertexColors: true, transparent: true, opacity: .052,
-    side: T.DoubleSide, depthWrite: false, blending: T.AdditiveBlending,
-    toneMapped: false
-  }));
-  mesh.frustumCulled = false;
-  meadowRays.add(mesh);
-}
-
-
-// Extra free-roam grove: one instanced canopy batch, no draw call per tree.
-{
-  const trunkGeo = new T.CylinderGeometry(.19,.34,3.4,5);
-  const crownGeo = new T.IcosahedronGeometry(1.9,0);
-  const trunks = new T.InstancedMesh(trunkGeo, standard(0x615344), 110);
-  const crowns = new T.InstancedMesh(crownGeo, foliageShader(standard(0x527e5e)), 110);
-  const dummy = new T.Object3D();
-  for(let i=0;i<110;i++){
-    const side = i%4, a=meadowRand(), b=meadowRand();
-    const x=side<2?(side===0?-1:1)*(43+a*40):(b-.5)*160;
-    const z=side>=2?(side===2?-1:1)*(33+a*42):(b-.5)*145;
-    dummy.position.set(x,1.7,z);dummy.rotation.set(0,b*6.28,0);dummy.scale.setScalar(.85+b*.5);dummy.updateMatrix();
-    trunks.setMatrixAt(i,dummy.matrix);
-    dummy.position.y=4.1;dummy.scale.setScalar(.9+b*.65);dummy.updateMatrix();
-    crowns.setMatrixAt(i,dummy.matrix);
-    crowns.setColorAt(i,new T.Color().setHSL(.31+b*.06,.24,.28+b*.1));
-  }
-  trunks.instanceMatrix.needsUpdate=true;crowns.instanceMatrix.needsUpdate=true;
-  groveRoot.add(trunks,crowns);
-}
-// Water with transparent layered surface, shoreline and subtle shader ripple.
-// The fish are simple colored shapes below the surface, not detailed 3D models.
-const pondLife=[];
-for(const [cx,cz,rx,rz] of [[-50,-31,12,8],[47,39,14,10],[52,-39,9,7]]){
-  const rim=addMesh(new T.CircleGeometry(1,48),standard(0x7c8b70,{roughness:1}),groveRoot,cx,.012,cz);
-  rim.rotation.x=-Math.PI/2;rim.scale.set(rx*1.12,rz*1.12,1);
-  const bed=addMesh(new T.CircleGeometry(1,48),standard(0x315c54,{roughness:1}),groveRoot,cx,.016,cz);
-  bed.rotation.x=-Math.PI/2;bed.scale.set(rx,rz,1);
-  const waterMat=new T.MeshPhysicalMaterial({
-    color:0x4a9d91,transparent:true,opacity:.70,roughness:.18,metalness:0,
-    clearcoat:.65,clearcoatRoughness:.12,depthWrite:false,side:T.DoubleSide
-  });
-  const water=addMesh(new T.CircleGeometry(1,48),waterMat,groveRoot,cx,.055,cz);
-  water.rotation.x=-Math.PI/2;water.scale.set(rx*.97,rz*.97,1);
-  const ripples=[];
-  for(let j=0;j<3;j++){
-    const r=addMesh(new T.RingGeometry(.65+j*.95,.69+j*.95,36),
-      new T.MeshBasicMaterial({color:0xc7e8d8,transparent:true,opacity:.17,depthWrite:false,side:T.DoubleSide}),
-      groveRoot,cx+(j-1)*rx*.22,.068,cz+(j-1)*rz*.17);
-    r.rotation.x=-Math.PI/2;r.scale.set(1,.75,1);ripples.push(r);
-  }
-  for(let j=0;j<7;j++){
-    const fish=new T.Group();
-    const body=new T.Mesh(new T.PlaneGeometry(.7,.23),new T.MeshBasicMaterial({
-      color:[0xf4bc77,0xdee4c1,0xe29a7d,0x8eb7ab][j%4],side:T.DoubleSide,depthWrite:false
-    }));
-    body.rotation.x=-Math.PI/2;fish.add(body);
-    const tail=new T.Mesh(new T.BufferGeometry(),body.material);
-    // Fish tail drawn as a simple triangular fin
-    tail.geometry.setAttribute('position',new T.Float32BufferAttribute([-.34,0,0,-.7,0,.18,-.7,0,-.18],3));
-    fish.add(tail);groveRoot.add(fish);
-    pondLife.push({fish,cx,cz,rx,rz,j,phase:meadowRand()*6.28,ripples:j===0?ripples:null});
-  }
-}
-// Wind streaks and flat butterfly sprites share two batched BufferGeometries.
-const breezeCount=72,butterflyCount=30;
-const breezeGeo=new T.BufferGeometry(),butterflyGeo=new T.BufferGeometry();
-breezeGeo.setAttribute('position',new T.BufferAttribute(new Float32Array(breezeCount*6),3));
-butterflyGeo.setAttribute('position',new T.BufferAttribute(new Float32Array(butterflyCount*9),3));
-const breeze=new T.LineSegments(breezeGeo,new T.LineBasicMaterial({
-  color:0xd4eee0,transparent:true,opacity:.19,depthWrite:false
-}));
-const butterflies=new T.Mesh(butterflyGeo,new T.MeshBasicMaterial({
-  color:0xffd8a5,side:T.DoubleSide,transparent:true,opacity:.84,depthWrite:false
-}));
-breeze.frustumCulled=false;butterflies.frustumCulled=false;
-groveRoot.add(breeze,butterflies);
-let groveAmbientFrame=0;
-function animateGroveAmbient(time){
-  if(!groveRoot.visible)return;
-  // Animate at 20fps max, skip expensive decorative work on low quality.
-  if(settings.quality===0||settings.reduced){breeze.visible=false;butterflies.visible=false;return;}
-  breeze.visible=butterflies.visible=true;
-  if(++groveAmbientFrame%3!==0)return;
-  const bp=breezeGeo.attributes.position,fp=butterflyGeo.attributes.position;
-  for(let i=0;i<breezeCount;i++){
-    const t=time*.8+i*7.3,x=((i*17.93+t*6)%166)-83,z=((i*11.37+t*2)%148)-74,y=.9+(i%8)*.37;
-    bp.setXYZ(i*2,x,y,z);bp.setXYZ(i*2+1,x+(.7+i%4*.3),y+.04,z+.13);
-  }
-  for(let i=0;i<butterflyCount;i++){
-    const t=time*.55+i*2.4,x=Math.sin(t*.4+i*7.1)*68,z=Math.cos(t*.3+i*3.9)*61;
-    const y=1.1+Math.sin(t*1.7+i)*.55+(i%4)*.25,flap=Math.abs(Math.sin(time*9+i));
-    fp.setXYZ(i*3,x,y,z);fp.setXYZ(i*3+1,x-.18,y+.13*flap,z+.08);
-    fp.setXYZ(i*3+2,x+.18,y+.13*flap,z+.08);
-  }
-  bp.needsUpdate=true;fp.needsUpdate=true;
-  for(const p of pondLife){
-    const t=time*.7+p.phase;
-    p.fish.position.set(p.cx+Math.cos(t)*p.rx*.56,.043,p.cz+Math.sin(t)*p.rz*.56);
-    p.fish.rotation.y=-t;
-    if(p.ripples)for(let i=0;i<p.ripples.length;i++)p.ripples[i].material.opacity=.09+.08*Math.sin(time*1.4+i);
-  }
-}
-
 const meadowBounds = { x: MEADOW_X, z: MEADOW_Z };
 const romanBounds = { x: ARENA_X, z: ARENA_Z };
-function arenaSize() { return inMeadow() ? meadowBounds : romanBounds; }
+function arenaSize() {
+  return openMeadowActive() ? meadowMap.MEADOW_BOUNDS : inMeadow() ? meadowBounds : romanBounds;
+}
 function showEnvironment() {
-  const name = inMeadow() ? 'meadow' : 'rome';
+  const publicMap = openMeadowActive();
+  const meadow = inMeadow();
+  const name = publicMap ? 'open-meadow' : meadow ? 'meadow' : 'rome';
   if (name === activeEnvironment) return;
+  const wasPublic = activeEnvironment === 'open-meadow';
+  if (wasPublic) {
+    meadowWorld.release();
+    fighters[0].shadow.rotation.set(-Math.PI / 2, 0, 0);
+    meadowQualityLimit = 2;
+    resolutionScale = 1;
+  }
   activeEnvironment = name;
-  const meadow = name === 'meadow';
-  groveRoot.visible = meadow;
-  meadowRays.visible = meadow && settings.quality > 0 && !settings.reduced;
+  groveRoot.visible = meadow && !publicMap;
+  if (meadowWorld) meadowWorld.root.visible = publicMap;
+  // The ring has the same footprint and gameplay in the expanded world.
+  (publicMap ? meadowWorld.root : groveRoot).add(fightRing);
   for (const mesh of romanSet) mesh.visible = !meadow;
-  scene.fog = meadow ? meadowFog : romanFog;
-  scene.background.setHex(meadow ? 0x9fb7aa : 0x594052);
-  hemisphere.color.copy(meadow ? groveHemi : baseHemi);
-  hemisphere.groundColor.copy(meadow ? groveGroundLight : baseGroundLight);
-  hemisphere.intensity = meadow ? .86 : .83;
-  sun.color.copy(meadow ? groveSunColor : baseSunColor);
-  sun.position.copy(meadow ? meadowSun : romanSun);
-  sun.intensity = meadow ? 1.28 : 1.53;
-  rim.intensity = meadow ? .42 : .66;
-  renderer.toneMappingExposure = meadow ? .91 : 1.05;
-  sun.shadow.camera.left = meadow ? -57 : -36;
-  sun.shadow.camera.right = meadow ? 57 : 36;
-  sun.shadow.camera.top = meadow ? 49 : 30;
-  sun.shadow.camera.bottom = meadow ? -49 : -30;
+  const look = publicMap ? meadowWorld.look : null;
+  scene.fog = look?.fog ?? (meadow ? meadowFog : romanFog);
+  scene.background.setHex(look?.sky ?? (meadow ? 0x9fb7aa : 0x594052));
+  if (look) {
+    hemisphere.color.setHex(look.hemi);
+    hemisphere.groundColor.setHex(look.ground);
+    sun.color.setHex(look.sun);
+  } else {
+    hemisphere.color.copy(meadow ? groveHemi : baseHemi);
+    hemisphere.groundColor.copy(meadow ? groveGroundLight : baseGroundLight);
+    sun.color.copy(meadow ? groveSunColor : baseSunColor);
+  }
+  hemisphere.intensity = look?.hemiPower ?? (meadow ? .86 : .83);
+  sun.position.copy(publicMap ? look.lightDirection : meadow ? meadowSun : romanSun);
+  if (publicMap) sun.position.multiplyScalar(79);
+  sun.target.position.set(0, 0, 0);
+  sun.target.updateMatrixWorld();
+  sun.intensity = look?.sunPower ?? (meadow ? 1.28 : 1.53);
+  rim.intensity = look?.rimPower ?? (meadow ? .42 : .66);
+  renderer.toneMappingExposure = publicMap ? .97 : meadow ? .91 : 1.05;
+  sun.shadow.camera.left = publicMap ? -48 : meadow ? -57 : -36;
+  sun.shadow.camera.right = publicMap ? 48 : meadow ? 57 : 36;
+  sun.shadow.camera.top = publicMap ? 43 : meadow ? 49 : 30;
+  sun.shadow.camera.bottom = publicMap ? -41 : meadow ? -49 : -30;
+  sun.shadow.camera.far = publicMap ? 147 : 91;
   sun.shadow.camera.updateProjectionMatrix();
   renderer.shadowMap.needsUpdate = true;
+  if (wasPublic || publicMap) updateQuality();
   document.body.classList.toggle('meadow', meadow);
 }
 function animateMeadow(time) {
-  animateGroveAmbient(time);
   foliageTime.value = settings.reduced ? 0 : time;
   for (const [i, glow] of groveLanterns.entries()) glow.material.opacity = .30 + Math.sin(time * 3 + i) * .065;
   const attribute = driftMeadowGeo.attributes.position;
@@ -3615,6 +3530,7 @@ function advanceBullets(dt) {
   }
 }
 function contain(p) {
+  if (openMeadowActive()) return meadowMap.containMeadow(p);
   const bounds = arenaSize();
   const edge = Math.hypot(p.x / bounds.x, p.z / bounds.z);
   if (edge > 1) {
@@ -3635,7 +3551,8 @@ function contain(p) {
 }
 function drivePlayer(p, input, dt, air = p.air > 0 || p.vy > 0) {
   const baseSpeed = p.stun > 0 ? 1.15 : p.attack ? (p.attack === 'nova' ? .5 : 3.9) : p.dashTime > 0 ? .54 : 7.35;
-  const speed = baseSpeed * (p.chill > 0 ? 1 - p.chillAmount : 1);
+  const pace = openMeadowActive() ? meadowMap.meadowWaterPace(p.x, p.z) : 1;
+  const speed = baseSpeed * pace * (p.chill > 0 ? 1 - p.chillAmount : 1);
   const traction = state.run && stageIndex() === 2 ? .61 : 1;
   const len = Math.max(1, Math.hypot(input.x, input.z));
   const control = air ? .32 : 1;
@@ -4358,6 +4275,19 @@ function animateEffects(dt, realDt) {
   $('hitVignette').style.opacity = settings.vig && !settings.reduced ? hurtTint * .76 : 0;
   $('callout').hidden = calloutTime <= 0 || state.paused;
 }
+const meadowNormal = new T.Vector3(), meadowUp = new T.Vector3(0, 0, 1);
+function placeMeadowFighter(model) {
+  const height = meadowMap.meadowHeight;
+  const { x, z } = model.shadow.position;
+  const y = height(x, z);
+  model.root.position.y += y;
+  model.shadow.position.y += y;
+  if (model.dizzy?.visible) model.dizzy.position.y += y;
+  // Read only four nearby heights to keep the contact shadow seated on slopes.
+  meadowNormal.set(height(x - .45, z) - height(x + .45, z), .90,
+    height(x, z - .45) - height(x, z + .45)).normalize();
+  model.shadow.quaternion.setFromUnitVectors(meadowUp, meadowNormal);
+}
 const projection = new T.Vector3();
 function project(x, y, z) {
   projection.set(x, y, z).project(camera);
@@ -4577,8 +4507,26 @@ function updateLook(dt) {
   view.pitch = lerp(view.pitch, view.targetPitch, damp(20 - settings.smooth * 14, dt));
 }
 function cameraLimit(anchorX, anchorY, anchorZ, point) {
+  if (openMeadowActive()) {
+    const midpointX = (anchorX + point.x) * .5, midpointZ = (anchorZ + point.z) * .5;
+    // The camera arm is short. Probe the tiles at its start, midpoint, and end.
+    let hit = 1;
+    for (const near of [meadowMap.meadowCoverNear(anchorX, anchorZ),
+      meadowMap.meadowCoverNear(midpointX, midpointZ), meadowMap.meadowCoverNear(point.x, point.z)]) {
+      for (const p of near) {
+        const fraction = segmentCircle(anchorX, anchorZ, point.x, point.z, p.x, p.z, p.r + .4);
+        if (fraction < hit && lerp(anchorY, point.y, fraction) < meadowMap.meadowHeight(p.x, p.z) + p.height + .3) hit = fraction;
+      }
+    }
+    if (hit < 1) {
+      const f = Math.max(.22, hit - .08);
+      point.set(lerp(anchorX, point.x, f), lerp(anchorY, point.y, f) + .12, lerp(anchorZ, point.z, f));
+    }
+    point.y = Math.max(point.y, meadowMap.meadowHeight(point.x, point.z) + .66,
+      2 * (meadowMap.meadowHeight(midpointX, midpointZ) + .38) - anchorY);
+  }
   let first = 1;
-  for (const p of runCover()) {
+  for (const p of openMeadowActive() ? [] : runCover()) {
     const fraction = segmentCircle(anchorX, anchorZ, point.x, point.z, p.x, p.z, p.r + .40);
     if (fraction < first && lerp(anchorY, point.y, fraction) < p.height + .30) first = fraction;
   }
@@ -4622,7 +4570,10 @@ function aimCamera(dt, realDt) {
     } else {
       normalTarget.set(view.anchorX + fx * 17, 1.05 - Math.tan(view.pitch - .14) * 12, view.anchorZ + fz * 17);
     }
-    cameraLimit(view.anchorX, 1.16 + own.air * .35, view.anchorZ, normalSpot);
+    const ownGround = openMeadowActive() ? meadowMap.meadowHeight(view.anchorX, view.anchorZ) : 0;
+    normalSpot.y += ownGround;
+    normalTarget.y += openMeadowActive() && view.lock && rival.active ? meadowMap.meadowHeight(rival.x, rival.z) : ownGround;
+    cameraLimit(view.anchorX, ownGround + 1.16 + own.air * .35, view.anchorZ, normalSpot);
     cameraSpot.copy(normalSpot);
     cameraTarget.copy(normalTarget);
     fov += racing * 4.4 + view.fov;
@@ -4881,6 +4832,7 @@ function resizeView() {
 }
 function applySettings(key) {
   if (key === 'quality' || key === 'adaptive' || !key) {
+    meadowQualityLimit = 2;
     resolutionScale = 1;
     updateQuality();
   }
@@ -4896,7 +4848,7 @@ function applySettings(key) {
   refreshAudio();
 }
 function updateQuality() {
-  const q = settings.quality;
+  const q = openMeadowActive() ? meadowQuality() : settings.quality;
   renderer.setPixelRatio(Math.min(devicePixelRatio, [1, 1.25, coarse ? 1.5 : 1.8][q]) * resolutionScale);
   renderer.shadowMap.enabled = q > 0;
   const size = q === 2 ? 1536 : 1024;
@@ -4915,9 +4867,16 @@ function samplePerformance(dt) {
   if (perfTime < 2.25) return;
   const fps = perfFrames / perfTime;
   if (settings.fps) $('fps').textContent = Math.round(fps) + ' FPS';
-  if (settings.adaptive && mode !== 'lobby' && !state.paused && fps < (coarse ? 33 : 40) && resolutionScale > .72) {
-    resolutionScale = Math.max(.71, resolutionScale - .095);
-    updateQuality();
+  const adaptive = settings.adaptive || (openMeadowActive() && meadowAdaptiveChoice === undefined && coarse);
+  if (adaptive && mode !== 'lobby' && !state.paused && (mode !== 'public' || publicRoom.id)) {
+    const slow = fps < (coarse ? 33 : 40);
+    if (slow && openMeadowActive() && meadowQuality() > 0) {
+      meadowQualityLimit = meadowQuality() - 1;
+      updateQuality();
+    } else if (slow && resolutionScale > .72) {
+      resolutionScale = Math.max(.71, resolutionScale - .095);
+      updateQuality();
+    }
   }
   perfTime = 0;
   perfFrames = 0;
@@ -5047,7 +5006,8 @@ function drawHud() {
   const reticle = $('reticle'), bearing = $('bearing');
   const inactive = state.phase !== 'fight' || state.paused || self.hp <= 0;
   const model = mode === 'public' ? publicRoom.models.get(publicRoom.target) : fighters[1 - localSlot];
-  const target = view.lock && other.active && !inactive && model ? project(model.x, 1.97 * other.size + other.air, model.z) : null;
+  const ground = openMeadowActive() && model ? meadowMap.meadowHeight(model.x, model.z) : 0;
+  const target = view.lock && other.active && !inactive && model ? project(model.x, ground + 1.97 * other.size + other.air, model.z) : null;
   reticle.hidden = !settings.cross || inactive || (view.lock && !target);
   reticle.classList.toggle('locked', !!target);
   reticle.classList.toggle('strike', reticleFlash > 0);
@@ -6558,6 +6518,7 @@ function suspendMeadow(reason = '') {
   if (mode !== 'public') return;
   meadowSuspended = true;
   disconnectRoom();
+  state.p[0].active = false;
   if (reason === 'settings') setText($('fieldCount'), 'Paused');
 }
 function resumeMeadow() {
@@ -6571,7 +6532,7 @@ const publicRoom = {
   ws: null, id: 0, target: 0, locked: false, count: null, sequence: 0, lastSend: 0, lastTick: -1,
   updated: 0, roster: new Map(), frames: [], prediction: null, history: [], preview: null, events: [],
   models: new Map(), labels: new Map(), entry: 0, rtt: null,
-  lastPing: 0, timeout: 0, lastKo: null, kills: 0
+  lastPing: 0, timeout: 0, reconnect: 0, lastKo: null, kills: 0
 };
 const roomOrigin = 'https://slimeoo-multiplayer.balochnajool.workers.dev';
 function roomUnavailable() {
@@ -6729,7 +6690,7 @@ function stopRoomVoice(all=false){
 }
 
 function openPublicConnection() {
-  if (mode !== 'public' || document.hidden || meadowSuspended) return;
+  if (!openMeadowActive() || document.hidden || meadowSuspended || publicRoom.ws) return;
   const room = publicRoom;
   const path = new URL('/room/OPEN-MEADOW', roomOrigin);
   path.protocol = path.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -6743,7 +6704,7 @@ function openPublicConnection() {
   }, 6300);
   ws.addEventListener('open', () => {
     if (room.ws !== ws) return;
-    ws.send(JSON.stringify({ t: 'join', protocol: MEADOW_PROTOCOL, browserKey: meadowBrowserKey, name: profile.name, color: chosen, ranks: cleanBuild(readStore('slimeMeadowRoomBuild', practiceOptions.ranks)) }));
+    ws.send(JSON.stringify({ t: 'join', protocol: MEADOW_PROTOCOL, map: meadowMap.MAP_REVISION, browserKey: meadowBrowserKey, name: profile.name, color: chosen, ranks: cleanBuild(readStore('slimeMeadowRoomBuild', practiceOptions.ranks)) }));
   });
   ws.addEventListener('message', event => {
     if (room.ws !== ws) return;
@@ -6758,20 +6719,28 @@ function openPublicConnection() {
     if (packet.t === 'error') return leave(typeof packet.message === 'string' ? packet.message : 'The room is unavailable.');
     if ((packet.t === 'roster' || packet.t === 'joined') && Array.isArray(packet.roster) && packet.roster.length <= ROOM_CAP) {
       if (packet.t === 'joined') {
+        if (packet.map !== meadowMap.MAP_REVISION) return leave('Open Meadow is updating. Please try again shortly.');
         clearTimeout(room.timeout);
         room.id = packet.id;
         // Begin local prediction immediately. Waiting for the first binary snapshot
         // used to disable both the movement loop and subsequent input transmissions.
-        const initial = { ...state.p[0], x: -24, z: 15, r: .7 };
+        const spawn = meadowMap.MEADOW_SPAWN;
+        const x = Number.isFinite(packet.x) ? packet.x : spawn.x;
+        const z = Number.isFinite(packet.z) ? packet.z : spawn.z;
+        const initial = { ...state.p[0], x, z, r: spawn.r };
         state.p[0] = { ...initial, active: true };
         room.prediction = { ...initial, active: true, hp: 100, en: 0,
           attack: '', attackTime: 0, stun: 0, dashTime: 0, dash: 0,
           kx: 0, kz: 0, vx: 0, vz: 0, predictedDash: 0,
           dashInput: inputCounts.dash };
+        fighters[0].x = view.anchorX = initial.x;
+        fighters[0].z = view.anchorZ = initial.z;
+        view.yaw = view.targetYaw = initial.r;
         room.updated = performance.now();
         room.locked = settings.autoLock;
         state.phase = 'fight';
         state.paused = false;
+        document.body.classList.add('public-play');
         $('publicHud').hidden = false;
         view.fresh = true;
         toast('You joined Open Meadow');
@@ -6799,7 +6768,8 @@ function openPublicConnection() {
     } else if (packet.t === 'fx' && Array.isArray(packet.events)) {
       for (const q of packet.events.slice(0, 90)) {
         if (!q || !Number.isFinite(q.x) || !Number.isFinite(q.z) || !Number.isInteger(q.id) ||
-            typeof q.type !== 'string' || Math.abs(q.x) > 100 || Math.abs(q.z) > 100) continue;
+            typeof q.type !== 'string' || Math.abs(q.x) > meadowMap.MEADOW_BOUNDS.x + 2 ||
+            Math.abs(q.z) > meadowMap.MEADOW_BOUNDS.z + 2) continue;
         if ((q.type === 'skill' || q.type === 'wave' || q.type === 'waveCue') &&
             (!Object.hasOwn(skills, q.skill) || ![1, 2, 3].includes(q.rank))) continue;
         room.events.push(q);
@@ -6819,12 +6789,26 @@ function openPublicConnection() {
       toast(packet.ok ? 'Build equipped' : packet.message || 'You can change builds between fights.');
     }
   });
-  ws.addEventListener('close', () => {
-    if (room.ws === ws) leave(room.id ? 'You left Open Meadow because the connection closed.' : roomUnavailable());
+  ws.addEventListener('close', event => {
+    if (room.ws !== ws) return;
+    if (room.id && [1001, 1006, 1012].includes(event.code) && rejoinMeadowOnce()) return;
+    leave(room.id ? 'You left Open Meadow because the connection closed.' : roomUnavailable());
   });
   ws.addEventListener('error', () => {
     if (room.ws === ws && !room.id) leave(roomUnavailable());
   });
+}
+function rejoinMeadowOnce() {
+  const room = publicRoom;
+  if (!openMeadowActive() || meadowSuspended || document.hidden || room.reconnect) return false;
+  room.reconnect = 1;
+  disconnectRoom();
+  state.p[0].active = false;
+  document.body.classList.add('public-play');
+  $('publicHud').hidden = false;
+  toast('Reconnecting to Open Meadow…');
+  openPublicConnection();
+  return true;
 }
 function roomPose(meta, p) {
   return { ...p, ...meta, active: true, growth: 0, vy: 0 };
@@ -6838,6 +6822,7 @@ function receiveRoomState(packet) {
   if (!current || !meta) return;
   room.lastTick = packet.tick;
   room.updated = now;
+  room.reconnect = 0;
   room.frames.push({ now, tick: packet.tick, poses });
   if (room.frames.length > 7) room.frames.shift();
   state.bullets = packet.bullets;
@@ -7012,7 +6997,7 @@ function animatePublic(dt, time) {
   // Keep transmitting input even if an authoritative state packet is missing.
   // Otherwise a lost first snapshot permanently freezes the player.
   if (!room.prediction) {
-    room.prediction = { ...state.p[0], x: -24, z: 15, active: true, hp: 100, en: 0,
+    room.prediction = { ...state.p[0], ...meadowMap.MEADOW_SPAWN, active: true, hp: 100, en: 0,
       attack: '', attackTime: 0, stun: 0, dashTime: 0, dash: 0,
       kx: 0, kz: 0, vx: 0, vz: 0, predictedDash: 0,
       dashInput: inputCounts.dash };
@@ -7036,9 +7021,10 @@ function animatePublic(dt, time) {
   state.p[0] = { ...p, active: true };
   sendRoomInput();
   const last = room.frames.at(-1);
-  if (!last && now - room.updated > 3500 && !room.warnedSnapshot) {
+  if (now - room.updated > 5000 && !room.warnedSnapshot) {
+    if (rejoinMeadowOnce()) return;
     room.warnedSnapshot = true;
-    toast('Connected, but no player-state updates. Check Cloudflare Worker logs.');
+    toast('Player updates stopped. Try rejoining Open Meadow.');
   }
   if (last) {
     for (const [id, meta] of room.roster) {
@@ -7254,6 +7240,7 @@ function sendRoomEmote(key) {
   const now = performance.now();
   if (now - roomEmoteRequest < 245) return;
   roomEmoteRequest = now;
+  sendRoomInput(true);
   publicRoom.ws.send(JSON.stringify({ t: 'emote', key }));
   closeOverlay(false);
 }
@@ -7718,10 +7705,17 @@ function enter(type, code, format = lobbyFormat) {
   $('fieldBuild').hidden = type !== 'public';
   if (type === 'bot') beginPractice(format);
   else if (type === 'public') {
+    publicRoom.reconnect = 0;
     document.body.classList.add('public-play');
     $('publicHud').hidden = false;
     publicRoom.locked = settings.autoLock;
-    openPublicConnection();
+    const entry = entryNonce;
+    loadMeadowWorld().then(() => {
+      if (mode === 'public' && entry === entryNonce) openPublicConnection();
+    }).catch(error => {
+      console.error('Could not load Open Meadow', error);
+      if (mode === 'public' && entry === entryNonce) leave('Open Meadow could not load. Refresh the game and try again.');
+    });
   } else connect(type, code);
   refreshAudio();
 }
@@ -7913,6 +7907,10 @@ function frame(now) {
   audioFrame();
   animateFighters(state.paused && mode !== 'lobby' ? 0 : vdt, worldTime);
   animateGlobs(state.paused ? 0 : vdt, worldTime);
+  if (openMeadowActive()) {
+    if (fighters[0].root.visible) placeMeadowFighter(fighters[0]);
+    for (const model of publicRoom.models.values()) if (model.root.visible) placeMeadowFighter(model);
+  }
   aimCamera(Math.min(dt, .068), dt);
   batchRoomFighters();
   animateEffects(vdt, dt);
@@ -7926,11 +7924,16 @@ function frame(now) {
   drawHud();
   drawDraft();
   animateDraftCard(now);
-  if (now - shadowAt >= (coarse ? 39 : 28)) {
+  const publicMap = openMeadowActive();
+  const shadowInterval = publicMap ? meadowQuality() === 2 ? 48 : 86 : coarse ? 39 : 28;
+  if (now - shadowAt >= shadowInterval) {
     shadowAt = now;
     renderer.shadowMap.needsUpdate = true;
   }
-  renderer.render(scene, camera);
+  if (publicMap) {
+    meadowWorld.update(camera, worldTime, meadowQuality(), settings.reduced);
+    meadowWorld.render(scene, camera);
+  } else renderer.render(scene, camera);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
