@@ -96,7 +96,7 @@ function act(action){if(!joined||!net.id)return;if(action==='emote'){net.emote('
 }
 document.querySelectorAll('[data-action]').forEach(b=>b.addEventListener('click',()=>act(b.dataset.action)));
 $('respawn').onclick=()=>{net.command('rpg.respawn');$('down').hidden=true;};$('interact').onclick=()=>nearestNpc&&openPanel('npc',nearestNpc);
-document.querySelectorAll('[data-panel]').forEach(b=>b.onclick=()=>openPanel(b.dataset.panel));
+document.querySelectorAll('[data-panel]').forEach(b=>{b.setAttribute('aria-label',({bag:'Inventory',equipment:'Equipment',skills:'Skills',quests:'Quests',map:'World map',chat:'Chat and emotes',settings:'Settings'})[b.dataset.panel]);b.onclick=()=>openPanel(b.dataset.panel);});
 $('close-panel').onclick=()=>$('panel').close();$('panel').addEventListener('close',()=>{modalNpc=null;keys.clear();});
 const kindName=kind=>({sword:'Sword',bow:'Bow',spell:'Equippable spell',armor:'Armor',consumable:'Tonic',material:'Crafting material'}[kind]);
 const itemTile=(id,count)=>{const item=ITEMS[id];return `<button class="item ${Object.values(character.gear).includes(id)?'active':''}" data-item="${id}"><i style="color:${item.color}">${itemIcon(item)}</i><strong>${item.name}${character.upgrades[id]?' +'+character.upgrades[id]:''}</strong><small>${kindName(item.kind)} · Lv ${item.level}${count>1?' · ×'+count:''}</small></button>`;};
