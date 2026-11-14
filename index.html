@@ -4562,7 +4562,7 @@ function resetInputs() {
   stick.classList.remove('on');
 }
 function trigger(action) {
-  if (mode === 'lobby' || state.phase !== 'fight' || !gameReady()) return;
+  if (mode === 'lobby' || state.phase !== 'fight' || (mode !== 'public' && !gameReady())) return;
   if (mode === 'public') {
     if (!publicRoom.id || state.p[0].hp <= 0) return;
     if (!roomCanFight() && (action === 'spit' || action === 'nova')) {
@@ -4590,7 +4590,7 @@ function readInput() {
   const f = Math.sin(view.yaw), g = Math.cos(view.yaw);
   const self = renderedPose(localSlot), other = renderedPose(1 - localSlot);
   const desired = view.lock && other.active ? Math.atan2(other.x - self.x, other.z - self.z) : view.yaw;
-  const ready = gameReady();
+  const ready = mode === 'public' ? !document.hidden : gameReady();
   return {
     x: ready ? (-g * right + f * forward) / magnitude : 0,
     z: ready ? (f * right + g * forward) / magnitude : 0,
@@ -6441,6 +6441,7 @@ function disconnectRoom() {
   room.lastTick = -1;
   room.prediction = room.preview = room.lastKo = room.rtt = null;
   room.locked = false;
+  room.warnedSnapshot = false;
   clearRoomSocial();
   document.body.classList.remove('public-play', 'hangout');
   $('fieldChat').hidden = $('fieldEmotes').hidden = $('publicHint').hidden = true;
@@ -6480,6 +6481,14 @@ function openPublicConnection() {
       if (packet.t === 'joined') {
         clearTimeout(room.timeout);
         room.id = packet.id;
+        // Begin local prediction immediately. Waiting for the first binary snapshot
+        // used to disable both the movement loop and subsequent input transmissions.
+        const initial = state.p[0];
+        room.prediction = { ...initial, active: true, hp: 100, en: 0,
+          attack: '', attackTime: 0, stun: 0, dashTime: 0, dash: 0,
+          kx: 0, kz: 0, vx: 0, vz: 0, predictedDash: 0,
+          dashInput: inputCounts.dash };
+        room.updated = performance.now();
         room.locked = settings.autoLock;
         state.phase = 'fight';
         $('publicHud').hidden = false;
@@ -6715,7 +6724,15 @@ function roomEffects() {
 }
 function animatePublic(dt, time) {
   const room = publicRoom, now = performance.now();
-  if (!room.id || !room.prediction) return;
+  if (!room.id) return;
+  // Keep transmitting input even if an authoritative state packet is missing.
+  // Otherwise a lost first snapshot permanently freezes the player.
+  if (!room.prediction) {
+    room.prediction = { ...state.p[0], active: true, hp: 100, en: 0,
+      attack: '', attackTime: 0, stun: 0, dashTime: 0, dash: 0,
+      kx: 0, kz: 0, vx: 0, vz: 0, predictedDash: 0,
+      dashInput: inputCounts.dash };
+  }
   pickRoomTarget();
   const target = room.target ? interpolatePublic(room.target) : null;
   const info = room.roster.get(room.target);
@@ -6734,6 +6751,10 @@ function animatePublic(dt, time) {
   }
   sendRoomInput();
   const last = room.frames.at(-1);
+  if (!last && now - room.updated > 3500 && !room.warnedSnapshot) {
+    room.warnedSnapshot = true;
+    toast('Connected, but no player-state updates. Check Cloudflare Worker logs.');
+  }
   if (last) {
     for (const [id, meta] of room.roster) {
       if (id === room.id) continue;
