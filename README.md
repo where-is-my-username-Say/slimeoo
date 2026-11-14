@@ -1,21 +1,18 @@
 # Slimeoo Cloudflare multiplayer backend
 
-This is a prototype WebSocket room relay with up to 50 connections per room. It is **not** yet an authoritative game server: movement, hits, damage, physics and anti-cheat still need server-side validation, and the existing Slimeoo HTML uses PeerJS and must be integrated with this protocol.
+Files: `worker.js` and `wrangler.jsonc` go at the root of the `slimeoo` GitHub repository on the `main` branch.
 
-## Deploy
+Deploy from Cloudflare Builds using `npx wrangler deploy` with the repository root as working directory. This must deploy the Wrangler configuration (including the SQLite Durable Object migration); saving the Worker through the browser editor alone is insufficient for first-time namespace creation.
 
-1. Place worker.js and wrangler.jsonc in the same repository root.
-2. Deploy using `npx wrangler deploy` from the repository directory, with Cloudflare authorization.
-3. Open `https://YOUR-WORKER.workers.dev/health` to verify.
-4. Connect the client with `new WebSocket('wss://YOUR-WORKER.workers.dev/room/ABCD12')`.
+Tests:
+- `https://slimeoo-multiplayer.<your-subdomain>.workers.dev/health` => JSON `ok: true`.
+- `https://slimeoo-multiplayer.<your-subdomain>.workers.dev/room/TEST123` => JSON `ok: true`, `players: 0`, `maxPlayers: 50`.
+- `wss://slimeoo-multiplayer.<your-subdomain>.workers.dev/room/TEST123` => WebSocket, welcome message.
 
-## WebSocket messages
+WebSocket client messages:
+- `{ "type": "name", "name": "My slime" }`
+- `{ "type": "state", "seq": 1, "x": 0, "y": 0, "z": 0, "yaw": 0 }` (increment seq)
+- `{ "type": "action", "action": "slap" }` (or spit/dodge/emote)
+- `{ "type": "ping", "at": 123456789 }`
 
-- Server welcome: `{type:'welcome',id,players,maxPlayers}`
-- Client movement: `{type:'state',seq:1,x:0,y:0,z:0,yaw:0}`
-- Client name: `{type:'name',name:'Slime'}`
-- Client action: `{type:'action',action:'slap'}` (also spit, dodge, emote)
-- Client ping: `{type:'ping',at:Date.now()}`
-- Server events: `state`, `joined`, `left`, `action`, `name`, `pong`
-
-Do not deploy the Worker as a replacement for the Vercel website. This Worker is a separate multiplayer service.
+This is a prototype relay backend, not an authoritative physics/combat simulation. Existing Slimeoo `index.html` PeerJS networking needs to be replaced or adapted before multiplayer works through Cloudflare. Test two clients before scaling to 50.
