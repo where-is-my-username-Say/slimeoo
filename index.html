@@ -1079,7 +1079,6 @@ body.public-play #pcHint, body.touch #publicHint { display: none; }
 
 </script>
 <script>
-<script>
 const AUDIO_FILES = {
   "meadow-music": "./meadow-music.mp3",
   "smack-a": "./smack-a.mp3",
@@ -6403,10 +6402,10 @@ const publicRoom = {
   models: new Map(), labels: new Map(), entry: 0, rtt: null,
   lastPing: 0, timeout: 0, lastKo: null, kills: 0
 };
-const roomOrigin = /^https?:$/.test(location.protocol) ? location.origin : 'http://localhost:8080';
+const roomOrigin = 'https://slimeoo-multiplayer.balochnajool.workers.dev';
 function roomUnavailable() {
   return location.protocol === 'file:' ? 'Start the Open Meadow server, then open the game at localhost:8080.' :
-    'Open Meadow is offline. Open the game from the running room server.';
+    'Open Meadow could not connect to Cloudflare. Check the multiplayer Worker deployment and GAME_ROOM binding.';
 }
 function displayRoomCount(count) {
   const text = (Number.isInteger(count) ? clamp(count, 0, ROOM_CAP) : '—') + '/' + ROOM_CAP;
@@ -6452,7 +6451,7 @@ function disconnectRoom() {
 }
 function openPublicConnection() {
   const room = publicRoom;
-  const path = new URL('/room', roomOrigin);
+  const path = new URL('/room/OPEN-MEADOW', roomOrigin);
   path.protocol = path.protocol === 'https:' ? 'wss:' : 'ws:';
   let ws;
   try { ws = new WebSocket(path); }
