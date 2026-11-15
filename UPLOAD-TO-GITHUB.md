@@ -1,9 +1,7 @@
-# Slimoo changed-files upload
+# Slimoo changed files
 
-This folder contains only source/assets that differ from the previous GitHub-Vercel package, plus required new files. It is a patch for the existing repository, not a standalone replacement project.
+Upload this folder's contents over the matching paths in the existing slimeoo repository. Keep unchanged repository files; this is a source patch, not a standalone project. New rpg-*.mjs files are required dependencies and must be uploaded too.
 
-Upload these files to the matching paths in https://github.com/where-is-my-username-Say/slimeoo . Replace files with the same names; keep all other repository files. Do not upload the outer GitHub-Vercel folder.
+Deploy the updated Cloudflare Worker first, then the Vercel frontend. Both must contain the shared village layout and dry-habitat rules. Keep the existing GAME_ROOM binding, GameRoom class and v1 SQLite migration to preserve saves. Google identity verification remains on the backend.
 
-Deploy the matching Cloudflare Worker first, then let Vercel build the frontend. Keep GAME_ROOM, GameRoom and the existing v1 migration. Backend Google verification and save endpoints must be deployed together with these frontend changes.
-
-No private saves, OAuth JSON, credentials, node_modules or local runtime state are included. The original reference and D:\SlimooData\v3 are untouched. Final repairs have not been tested, as requested. See RESTORATION.md.
+The upload folder contains source changes and required new assets only. It excludes saves, OAuth JSON, node_modules, generated dist, browser artifacts and temporary repair scripts. Final changes are untested at the user's request. See RESTORATION.md for scope.

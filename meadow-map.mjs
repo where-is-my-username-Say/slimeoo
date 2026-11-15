@@ -1,3 +1,4 @@
+import {containVillage,inVillage,VILLAGE_BUILDINGS} from './rpg-village-layout.mjs';
 /* Open Meadow geometry and horizontal collision, shared with the Durable Object. */
 export const MAP_REVISION = 'meadow-3-rpg';
 export const MEADOW_BOUNDS = Object.freeze({ x: 136, z: 113 });
@@ -102,7 +103,9 @@ export function meadowHeight(x, z) {
     const d = pondRadius(p, x, z);
     if (d < 1.35) return mix(pondBankHeight(p, d), y, smooth(1.11, 1.35, d));
   }
-  return y;
+  // A level village terrace joins gently to the surrounding meadow.
+  const villageEdge=Math.max(Math.abs((x+32)/31),Math.abs((z-16)/32));
+  return mix(.12,y,smooth(.85,1.12,villageEdge));
 }
 
 const landscapeRandom = meadowRandom(8191832);
@@ -121,7 +124,7 @@ const forestPatches = [
   [111,-28,24,26,12,.57]
 ];
 function canPlant(x, z, radius = 0) {
-  if(Math.hypot(x+24,z-15)<25 || (x>0&&x<126&&z>-106&&z<108))return false;
+  if(inVillage({x,z})||VILLAGE_BUILDINGS.some(b=>Math.hypot(x-b.x,z-b.z)<Math.max(b.w,b.d)*.8+4)||Math.hypot(x+24,z-15)<25 || (x>0&&x<126&&z>-106&&z<108))return false;
   if (Math.hypot(x / 142, z / 119) > 1 || Math.hypot(x + 24, z - 15) < 5.5 ||
       Math.hypot(x, z) < 14 || trailAmount(x, z) > .17 ||
       PONDS.some(p => pondRadius(p, x, z) < 1.12)) return false;
@@ -137,7 +140,7 @@ for (const [x, z, rx, rz, count, fir] of forestPatches) {
     accepted++;
   }
 }
-export const MEADOW_TREES = trees;
+export const MEADOW_TREES = trees.filter(t=>!inVillage(t)&&VILLAGE_BUILDINGS.every(b=>Math.hypot(t.x-b.x,t.z-b.z)>Math.max(b.w,b.d)*.8+4));
 
 export const MEADOW_BOULDERS = [
   { x: -12.8, z: -11, r: 1.48, height: 1.95 }, { x: 24, z: -10, r: 1.93, height: 2.65 },
@@ -149,7 +152,7 @@ export const MEADOW_BOULDERS = [
   { x: -80, z: 29.5, r: 1.63, height: 2.34 }, { x: -33, z: 43, r: 2.1, height: 2.43 },
   { x: 25, z: 60, r: 1.5, height: 2.5 }, { x: 34, z: -38, r: 1.14, height: 1.8 }
 ];
-const covers = [...MEADOW_BOULDERS, ...trees.map(t => ({
+const covers = [...MEADOW_BOULDERS, ...MEADOW_TREES.map(t => ({
   x: t.x, z: t.z, r: (t.form === 1 ? .44 : .59) * t.s, height: (t.form === 1 ? 6.4 : 5.15) * t.s
 }))];
 const coverCells = new Map(), noCover = [];
@@ -180,6 +183,7 @@ export function meadowWaterPace(x, z) {
 // Both the fixed-step server and client prediction resolve the same landscape.
 // Sliding keeps the tangential part of movement when you reach a tree or deep water.
 export function containMeadow(player) {
+  containVillage(player);
   const pad = .83 * (player.size || 1);
   const bounds = MEADOW_BOUNDS;
   const edge = Math.hypot(player.x / bounds.x, player.z / bounds.z);

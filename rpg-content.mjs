@@ -1,7 +1,10 @@
+import {buildingFor,villagePoint,inVillage} from './rpg-village-layout.mjs';
+import {sanitizeAppearance} from './rpg-appearance.mjs';
+import {huntingSpawns} from './rpg-hunting.mjs';
 import {containMeadow} from './meadow-map.mjs';
 export const RPG_VERSION=1;
-export const TOWN={x:-24,z:15,radius:19,name:'Dewbell Village'};
-export const inTown=(p)=>Math.hypot(p.x-TOWN.x,p.z-TOWN.z)<TOWN.radius;
+export const TOWN={x:-32,z:16,radius:32,name:'Dewbell Village'};
+export const inTown=inVillage;
 export const XP_TO_NEXT=level=>Math.round(48*Math.pow(level,1.65));
 const item=(id,name,kind,power,level,specialty,source,price,color)=>({id,name,kind,power,level,specialty,source,price,color});
 export const ITEMS=Object.fromEntries([
@@ -36,7 +39,7 @@ export const NPCS=[
  {id:'mallow',name:'Mallow',title:'The Drifting Acorn inn',role:'inn',x:-29,z:29,color:'#e5bbc9',animation:'bow',say:'Welcome home, wanderer. Your progress is already safe with us.'},
  {id:'scrip',name:'Scrip',title:'Traveling outfitter',role:'shop',x:-26,z:-1,color:'#8acbc5',animation:'count',say:'Buy the things you need. Sell only what you can spare.',stock:['dewblade','dewvest']},
  {id:'fern',name:'Fern',title:'Farm cartographer',role:'map',x:-7,z:13,color:'#a6d0a7',animation:'read',say:'One farm, three trails. Green is level 1, amber is level 5, violet is level 10. Watch their windups.'},
-];
+].map(n=>{const b=buildingFor(n.id);return {...n,...villagePoint(b,...b.npc),building:n.id,yaw:b.yaw};});
 // 25 authored families. Each has three server-spawned variants, not palette-only duplicates.
 export const SPECIES=[
  ['dewhopper','Dewhopper','frog','pounce','#91bf70',18,3,.9,'Dewblade fragments'],
@@ -66,7 +69,7 @@ export const SPECIES=[
  ['thornstalker','Thornstalker','wolf','pounce','#919e8f',29,5,.9,'Thorn King steel'],
 ].map(([id,name,form,pattern,color,hp,damage,windup,source],i)=>({id,name,form,pattern,color,hp,damage,windup,source,index:i}));
 export const TIERS=[{level:1,name:'Dew',x:8,hp:1,damage:1,color:'#abd795'},{level:5,name:'Briar',x:54,hp:3.4,damage:2.6,color:'#e3b56f'},{level:10,name:'Elder',x:98,hp:8,damage:5,color:'#c3a5df'}];
-export function makeSpawns(){return TIERS.flatMap(t=>SPECIES.map((s,i)=>{const row=i===0?0:(i%2?1:-1)*Math.ceil(i/2),position={x:t.x+(i%3)*5,z:15+row*4,vx:0,vz:0,kx:0,kz:0,size:1};containMeadow(position);return {id:s.id+'-'+t.level,species:s.id,tier:t.level,x:position.x,z:position.z};}));}
+export function makeSpawns(){return huntingSpawns(SPECIES,TIERS);}
 export const statsFor=c=>{const armor=ITEMS[c.gear.armor];const bonus=armor?.id==='dewvest'?8:armor?.id==='ironvest'?18:armor?.id==='thornvest'?32:0;return {maxHp:60+(c.level-1)*7+bonus,maxMana:40+(c.level-1)*3,armor:(armor?.power||0)+(c.upgrades?.[c.gear.armor]||0),power:(ITEMS[c.gear.weapon]?.power||4)+(c.upgrades?.[c.gear.weapon]||0)*2+Math.floor(c.level/3)};};
-export function newCharacter(name='Slime',color=0,loadout='sword'){const chosen=STARTERS[loadout]||STARTERS.sword;return {schema:1,revision:0,name:String(name).slice(0,16),color:Math.max(0,Math.min(3,Number(color)||0)),level:1,xp:0,gold:0,kills:0,inventory:{twigblade:1,reedbow:1,cinder:1,vest:1,potion:3},gear:{weapon:chosen,armor:'vest'},upgrades:{},quests:{firstSteps:{kills:0,claimed:false}},skills:[],builds:[],seen:[],loadout,createdAt:Date.now()};}
-export function migrateCharacter(saved,legacy={}){if(!saved)return {...newCharacter(legacy.name,legacy.color,legacy.loadout),legacy:{wins:Math.max(0,Number(legacy.wins)||0),cosmeticRanks:legacy.ranks||{}}};if(saved.schema===1)return saved;return {...newCharacter(saved.name||legacy.name,saved.color,saved.loadout),...saved,schema:1,inventory:{...newCharacter().inventory,...saved.inventory},gear:{weapon:'twigblade',armor:'vest',...saved.gear},quests:saved.quests||{firstSteps:{kills:0,claimed:false}},skills:saved.skills||[],builds:saved.builds||[],upgrades:saved.upgrades||{},seen:saved.seen||[],revision:saved.revision||0};}
+export function newCharacter(name='Slime',color=0,loadout='sword'){const chosen=STARTERS[loadout]||STARTERS.sword;return {schema:1,revision:0,appearance:sanitizeAppearance({},color),name:String(name).slice(0,16),color:Math.max(0,Math.min(3,Number(color)||0)),level:1,xp:0,gold:0,kills:0,inventory:{twigblade:1,reedbow:1,cinder:1,vest:1,potion:3},gear:{weapon:chosen,armor:'vest'},upgrades:{},quests:{firstSteps:{kills:0,claimed:false}},skills:[],builds:[],seen:[],loadout,createdAt:Date.now()};}
+export function migrateCharacter(saved,legacy={}){if(!saved)return {...newCharacter(legacy.name,legacy.color,legacy.loadout),legacy:{wins:Math.max(0,Number(legacy.wins)||0),cosmeticRanks:legacy.ranks||{}}};if(saved.schema===1)return {...saved,appearance:sanitizeAppearance(saved.appearance,saved.color)};return {...newCharacter(saved.name||legacy.name,saved.color,saved.loadout),...saved,schema:1,inventory:{...newCharacter().inventory,...saved.inventory},gear:{weapon:'twigblade',armor:'vest',...saved.gear},quests:saved.quests||{firstSteps:{kills:0,claimed:false}},skills:saved.skills||[],builds:saved.builds||[],upgrades:saved.upgrades||{},seen:saved.seen||[],revision:saved.revision||0};}

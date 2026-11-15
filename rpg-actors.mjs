@@ -1,3 +1,4 @@
+import {createCreature} from './rpg-creatures.mjs';
 import {createSlimeRig} from './rpg-slime.mjs';
 import * as T from './vendor/three.module.js';
 import {SPECIES,TIERS,ITEMS} from './rpg-content.mjs';
@@ -15,23 +16,5 @@ export function weaponModel(id){const item=ITEMS[id];const root=new T.Group();if
  return root;
 }
 export function slimeModel(color='#29977c',role='player',compact=false){return createSlimeRig(color,role,compact,{part,weaponModel});}
-export function enemyModel(speciesId,tierLevel){const s=SPECIES.find(s=>s.id===speciesId),tier=TIERS.find(t=>t.level===tierLevel),root=new T.Group(),rig=new T.Group();root.add(rig);const c=s.color,dark='#48514c',legs=[],wings=[],extras=[];let body;
- const shape=(geo,col,p,sz)=>part(rig,geo,col,p,sz);const limb=(x,z,len=.5)=>{const l=shape(cyl,dark,[x,.35,z],[.08,len,.08]);legs.push(l);return l;};
- const quadruped=['boar','fox','wolf','ram','croc'].includes(s.form);
- if(quadruped){body=shape(sphere,c,[0,.8,0],[.65,.49,s.form==='croc'?1.1:.8]);shape(sphere,c,[0,.94,.75],[.46,.4,.52]);for(const x of [-.43,.43])for(const z of [-.48,.48])limb(x,z);if(['fox','wolf'].includes(s.form)){for(const x of [-.23,.23])shape(cone,c,[x,1.45,.7],[.19,.45,.22]);shape(cone,c,[0,1,-.95],[.3,.8,.3]).rotation.x=-1;}if(s.form==='boar')for(const x of [-.32,.32])shape(cone,'#e6d8b9',[x,.9,1.05],[.1,.4,.12]).rotation.x=.7;if(s.form==='ram')for(const x of [-.4,.4])shape(torus,'#8d7c65',[x,1.15,.65],[.3,.3,.3]).rotation.y=Math.PI/2;if(s.form==='croc')for(let i=0;i<5;i++)shape(cone,'#b7bc8a',[0,1.25,-.8+i*.38],[.14,.2,.2]);}
- else if(['moth','bat','dragonfly','bird','rook','fish'].includes(s.form)){body=shape(sphere,c,[0,1.15,0],[.4,.56,.55]);for(const x of [-1,1]){const w=shape(sphere,s.form==='bat'?'#665a80':c,[x*.65,1.15,0],[.7,.09,s.form==='dragonfly'?.45:.6]);wings.push(w);}if(['bird','rook'].includes(s.form)){shape(cone,'#dfb96c',[0,1.2,.65],[.17,.45,.16]).rotation.x=Math.PI/2;for(const x of [-.2,.2])limb(x,0,.45);}if(s.form==='fish'){shape(cone,c,[0,1,-.7],[.5,.7,.1]).rotation.x=Math.PI/2;}if(s.form==='dragonfly'){shape(sphere,c,[0,1,-.8],[.12,.12,.9]);}}
- else if(['beetle','crab','spider','scorpion'].includes(s.form)){body=shape(sphere,c,[0,.7,0],[.75,.45,.7]);const n=s.form==='spider'?4:3;for(const x of [-1,1])for(let i=0;i<n;i++){const l=limb(x*.8,-.5+i*.4,.75);l.rotation.z=x*.9;}if(s.form==='beetle')shape(cone,'#d3b88b',[0,1.15,.55],[.22,.65,.25]).rotation.x=.6;if(['crab','scorpion'].includes(s.form))for(const x of [-1,1])shape(torus,c,[x*.8,.85,.85],[.36,.3,.36]).rotation.x=.6;if(s.form==='scorpion'){shape(torus,c,[0,1,-.7],[.6,.7,.6]).rotation.y=Math.PI/2;shape(cone,'#e9d48c',[0,1.6,-.85],[.18,.4,.18]);}}
- else if(s.form==='snake'){body=shape(torus,c,[0,.38,0],[.7,.7,.7]);body.rotation.x=Math.PI/2;shape(sphere,c,[.3,.8,.45],[.3,.6,.3]);}
- else if(s.form==='snail'){body=shape(sphere,c,[0,.3,.1],[.7,.3,.9]);shape(sphere,'#b7a380',[0,.85,-.1],[.68,.65,.65]);shape(torus,'#817663',[0,.9,.48],[.42,.42,.15]);for(const x of [-.3,.3])shape(cyl,c,[x,.8,.65],[.04,.65,.04]);}
- else if(s.form==='mushroom'){body=shape(cyl,'#d5c6ad',[0,.65,0],[.3,1.1,.3]);shape(sphere,c,[0,1.35,0],[.95,.38,.85]);for(let i=0;i<4;i++)shape(sphere,'#f0e4ca',[Math.sin(i*2)*.5,1.64,Math.cos(i*2)*.45],[.12,.045,.1]);}
- else if(s.form==='flower'){body=shape(cyl,'#71926d',[0,.65,0],[.13,1.1,.13]);for(let i=0;i<7;i++){const a=i/7*Math.PI*2;shape(sphere,c,[Math.sin(a)*.45,1.2,Math.cos(a)*.45],[.33,.18,.42]);}shape(sphere,'#f1c66f',[0,1.32,0],[.36,.23,.36]);}
- else if(['tree','golem','imp'].includes(s.form)){body=shape(s.form==='imp'?sphere:box,c,[0,1,0],[.72,1.25,.65]);shape(sphere,c,[0,1.8,.05],[.43,.4,.42]);for(const x of [-1,1]){limb(x*.38,0,.65);const arm=shape(box,c,[x*.65,1,.1],[.3,.8,.35]);wings.push(arm);}if(s.form==='tree')for(let i=0;i<4;i++)shape(cone,'#7f9b65',[Math.sin(i*2)*.5,2.2,Math.cos(i*2)*.35],[.7,.8,.6]);if(s.form==='imp')shape(cone,'#896a45',[0,2.15,0],[.6,.5,.55]);}
- else if(s.form==='frog'){body=shape(sphere,c,[0,.55,0],[.75,.5,.65]);for(const x of [-.6,.6]){const l=shape(sphere,c,[x,.25,-.2],[.4,.2,.5]);legs.push(l);shape(sphere,c,[x*.65,.96,.3],[.25,.25,.25]);}}
- else{body=shape(s.form==='wisp'?new T.OctahedronGeometry(1):sphere,c,[0,1.0,0],[.65,.7,.65]);if(s.form==='jelly')for(let i=0;i<5;i++){const l=shape(cyl,c,[Math.sin(i*2)*.35,.25,Math.cos(i*2)*.35],[.045,.7,.045]);legs.push(l);}if(s.form==='wisp')shape(torus,'#efc390',[0,1,0],[.8,.8,.8]).rotation.x=.5;}
- eye(rig,-.2,s.form==='golem'||s.form==='tree'||s.form==='imp'?1.85:1.02,.7);eye(rig,.2,s.form==='golem'||s.form==='tree'||s.form==='imp'?1.85:1.02,.7);
- if(tierLevel>=5)for(const side of [-1,1])extras.push(shape(cone,tier.color,[side*.55,1.45,-.2],[.16,.55,.17]));
- if(tierLevel===10){const crown=shape(torus,'#d2b375',[0,1.65,0],[.55,.55,.55]);crown.rotation.x=Math.PI/2;for(let i=0;i<4;i++)shape(new T.OctahedronGeometry(1),tier.color,[Math.sin(i*1.57)*.5,1.9,Math.cos(i*1.57)*.5],[.12,.22,.12]);}
- const scale=tierLevel===10?1.2:tierLevel===5?1.04:.84;root.scale.setScalar(scale);body.castShadow=true;body.receiveShadow=true;
- return {root,animate(t,phase,until){const walk=phase==='walk',windup=phase==='windup';rig.position.y=Math.abs(Math.sin(t*(walk?8:2)+s.index))*(wings.length?.17:walk?.12:.025);rig.rotation.x=windup?-.2:0;rig.rotation.z=windup?Math.sin(t*15)*.04:0;for(let i=0;i<legs.length;i++)legs[i].rotation.x=walk?Math.sin(t*9+i*Math.PI)*.45:Math.sin(t*2+i)*.04;for(let i=0;i<wings.length;i++)wings[i].rotation.z=Math.sin(t*(s.form==='dragonfly'?22:8)+i*Math.PI)*.4;for(const e of extras)e.rotation.y=t*.3;rig.scale.y=phase==='dead'?.1:windup?1.08:1;}};
-}
+export function enemyModel(speciesId,tierLevel){return createCreature(speciesId,tierLevel,{slimeModel});}
 export function itemIcon(item){if(!item)return '◇';return {sword:'⚔',bow:'➶',spell:'✦',armor:'♜',consumable:'♜',material:'◆'}[item.kind]||'◆';}

@@ -1114,7 +1114,9 @@ const AUDIO_FILES = {
   "fight-music-2": "./fight-music-2.mp3"
 };
 </script>
-<script>
+<script type="module">
+import {createOriginalSlime,animateOriginalSlime} from './rpg-original-slime.mjs';
+import {sanitizeAppearance} from './rpg-appearance.mjs';
 'use strict';
 
 const $ = id => document.getElementById(id);
@@ -2783,57 +2785,17 @@ function curveTube(points, width, material, parent) {
   const path = new T.CatmullRomCurve3(points.map(point => new T.Vector3(...point)));
   return addMesh(new T.TubeGeometry(path, 12, width, 6, false), material, parent);
 }
-function makeFighter(index) {
-  const root = new T.Group();
-  const tilt = new T.Group();
-  const jelly = new T.Group();
-  const face = new T.Group();
-  scene.add(root);
-  root.add(tilt);
-  tilt.add(jelly);
-  jelly.add(face);
-
-  const fill=new T.MeshToonMaterial({color:0x29977c});
-  const highlight=new T.MeshBasicMaterial({color:0xc9e7da,transparent:true,opacity:.4,depthWrite:false});
-  const body=addMesh(new T.SphereGeometry(1.15,24,18,0,TAU,0,Math.PI*.78),fill,jelly,0,.62,0);body.scale.set(1,.84,1);body.castShadow=true;body.receiveShadow=true;
-  ellipsoid(jelly,fill,0,.32,0,1.11,.35,1.11);
-  const shell=outline(body,1.025);shell.position.y=-.015;
-  ellipsoid(jelly,highlight,-.43,1.32,.72,.24,.064,.032);
-  const eyes=[];
-  for(const side of [-1,1]){
-    const eye=new T.Group();eye.position.set(side*.29,1.05,.97);face.add(eye);
-    ellipsoid(eye,eyeDark,0,0,0,.086,.155,.058,smallSphere);
-    const pupil=new T.Group();eye.add(pupil);ellipsoid(pupil,sparkle,-.038,.065,.055,.032,.032,.024,smallSphere);
-    const brow=new T.Group();face.add(brow);
-    ellipsoid(face,cheekMat,side*.49,.93,.92,.135,.049,.027,smallSphere);eyes.push({side,eye,pupil,brow});
-  }
-  const mouth=new T.Group();mouth.position.set(0,.89,1.01);face.add(mouth);ellipsoid(mouth,mouthMat,0,0,0,.12,.10,.042,smallSphere);
-  const smile=addMesh(new T.TorusGeometry(.10,.022,6,16,Math.PI),mouthMat,face,0,.89,.99);smile.rotation.z=Math.PI;
-  const pout=new T.Group(),tongue=new T.Group(),teeth=new T.Group();face.add(pout);mouth.add(tongue,teeth);
-  const crown=new T.Group();jelly.add(crown);
-  for(let i=0;i<7;i++){const a=(i-3)*.24;ellipsoid(crown,paleGold,Math.sin(a)*.62,1.58+Math.cos(a)*.08,.15,.072,.156,.042,smallSphere).rotation.z=-a*1.4;}
-  const arms=[];
-  for(const side of [-1,1]){
-    const shoulder=new T.Group();shoulder.position.set(side*.83,.75,.12);jelly.add(shoulder);
-    ellipsoid(shoulder,fill,side*.20,0,0,.42,.196,.196);
-    const palm=new T.Group();palm.position.set(side*.55,0,.1);shoulder.add(palm);ellipsoid(palm,fill,0,0,0,.30,.255,.132);
-    for(let f=0;f<3;f++)ellipsoid(palm,fill,(f-1)*.16,.24,.015,.085,.14,.081,smallSphere);
-    ellipsoid(palm,fill,-side*.29,.03,.02,.096,.15,.12,smallSphere);arms.push({side,shoulder,palm});
-  }
-
-  const dizzy = new T.Group();
-  for (let i = 0; i < 3; i++) {
-    const star = addMesh(starGeo, i % 2 ? goldMat : paleGold, dizzy);
-    outline(star, 1.11);
-  }
-  dizzy.visible = false;
-  scene.add(dizzy);
-  const shadow = addMesh(new T.PlaneGeometry(3.55, 3.55), new T.MeshBasicMaterial({
-    map: shadeTexture, color: 0x25162a, transparent: true, opacity: .66, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3
-  }), scene, 0, .024 + .002 * index, 0);
-  shadow.rotation.x = -Math.PI / 2;
-  return { root, tilt, jelly, face, fill, highlight, eyes, mouth, smile, pout, tongue, teeth, arms, crown, shadow, dizzy,
-    x: 0, z: 0, yaw: 0, inkColor: -1, bob: 0, hopPhase: 0, wobble: 0, wobbleSpeed: 0, hitX: 0, hitZ: 0, rag: null };
+function makeFighter(index){
+ const original=createOriginalSlime(T,[0x29977c,0xb95750,0x7253a6,0xa17b26][index%4]);
+ const root=original.g,jelly=original.jelly,face=original.face,tilt=new T.Group();root.remove(jelly);root.add(tilt);tilt.add(jelly);scene.add(root);
+ const crown=new T.Group();jelly.add(crown);for(const leaf of original.leaves)crown.attach(leaf);
+ const shadow=original.shadow;scene.attach(shadow);
+ const dizzy=new T.Group();for(let i=0;i<3;i++){const star=addMesh(starGeo,i%2?goldMat:paleGold,dizzy);outline(star,1.11);}dizzy.visible=false;scene.add(dizzy);
+ const eyes=original.eyes.map((eye,i)=>({side:i?1:-1,eye,pupil:new T.Group(),brow:new T.Group()}));
+ const arms=original.arms.map(a=>({side:a.side,shoulder:a.pivot,palm:a.palm}));
+ const highlight=new T.MeshBasicMaterial({color:0xc9e7da}),pout=new T.Group(),tongue=new T.Group(),teeth=new T.Group();
+ return {original,root,tilt,jelly,face,fill:original.bodyMat,highlight,eyes,mouth:original.mouth,smile:original.smile,pout,tongue,teeth,arms,crown,shadow,dizzy,
+ x:0,z:0,yaw:0,inkColor:-1,bob:0,hopPhase:0,wobble:0,wobbleSpeed:0,hitX:0,hitZ:0,rag:null};
 }
 const fighters = [makeFighter(0), makeFighter(1)];
 function setFighterColor(m, index) {
@@ -3046,6 +3008,16 @@ function animateFighters(dt, time) {
         arm.shoulder.rotation.set(Math.sin(knock.age * 18 + arm.side) * flail, arm.side * .36, arm.side * (1.03 + Math.sin(knock.age * 16) * flail));
       }
     }
+    if(!knock){
+      animateOriginalSlime(m.original,{time,speed,kind:p.attackTime>0?p.attack:'',progress:p.duration?clamp(1-p.attackTime/p.duration,0,1):1,combo:p.combo,hit:p.hit,phase:i});
+      const look=sanitizeAppearance(p.appearance,p.color);m.root.scale.set(look.size*look.width,look.size*look.height,look.size*look.width);m.fill.color.set(look.tint);m.jelly.scale.multiplyScalar(physicalSize);
+      m.mouth.scale.x=1;m.mouth.scale.z=.35;m.mouth.visible=!m.smile.visible;m.crown.visible=look.crown;m.crown.rotation.z=0;
+      for(const cheek of m.original.cheeks)cheek.visible=look.blush;
+      for(const eye of m.original.eyes){eye.scale.x=.75*look.eyes;eye.scale.y*=look.eyes;eye.scale.z=.5*look.eyes;}
+      for(const arm of m.original.arms)arm.pivot.scale.multiplyScalar(look.hands);
+      m.shadow.material.opacity=.22;m.shadow.scale.setScalar(physicalSize*look.size*look.width);
+      if(social){m.jelly.position.y+=social.y;m.jelly.scale.x*=social.width;m.jelly.scale.y*=social.height;m.jelly.scale.z*=social.width;m.jelly.rotation.y+=social.yaw;m.jelly.rotation.z+=social.roll;for(const a of m.original.arms){const gesture=social.arm+(a.side>0?social.wave:0);a.pivot.rotation.z-=a.side*gesture*.78;}}
+    }
   }
 }
 
@@ -3067,6 +3039,7 @@ function freshPlayer(slot, previous = {}) {
     countering: false, combo: 0, comboLanded: false, lastDamage: '',
     active: previous.active ?? (slot === 0),
     name: previous.name ?? (slot ? 'Rival' : profile.name),
+    appearance: sanitizeAppearance(previous.appearance ?? (slot===localSlot?readStore('slimeooRpgIdentity',{}).appearance:undefined),previous.color??(slot?1:chosen)),
     color: previous.color ?? (slot ? 1 : chosen)
   };
 }
@@ -7348,7 +7321,7 @@ function attach(connection, hostSide, token) {
     }
     lastRemote = lastSnapshot = performance.now();
     if (hostSide) setupMotionChannel(connection, true, token);
-    send({ t: 'hello', version: PROTOCOL, name: profile.name, color: chosen, ready: gameReady() });
+    send({ t: 'hello', version: PROTOCOL, name: profile.name, color: chosen, appearance:state.p[localSlot].appearance, ready: gameReady() });
   });
   connection.on('data', packet => {
     if (token !== netAttempt || link !== connection || !packet || typeof packet !== 'object') return;
@@ -7376,6 +7349,7 @@ function attach(connection, hostSide, token) {
       const rival = state.p[hostSide ? 1 : 0];
       rival.name = typeof packet.name === 'string' ? packet.name.trim().slice(0, 16) || 'Rival' : 'Rival';
       rival.color = Number.isInteger(packet.color) ? clamp(packet.color, 0, 3) : 1;
+      rival.appearance=sanitizeAppearance(packet.appearance,rival.color);
       rival.active = true;
       if (hostSide) {
         if (rival.color === chosen) rival.color = (chosen + 1) % 4;

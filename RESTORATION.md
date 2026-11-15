@@ -1,18 +1,27 @@
-# Slimoo restoration — 15 November 2026
+# Slimoo — original character and village repair
 
-Reference: D:\downloads\index.html (read only). Current project and its existing save/backend work were retained.
+## Character source
 
-- Restored the original dome, skirt, small dark eyes, blush, seven laurel leaves, fingered palms, slap curve and close shoulder framing. Shared-world players and NPCs use the same rig; duel/practice fighters retain their existing game state and network systems with restored visual construction.
-- Default camera migrates once to 62° FOV and distance 7. WASD remains relative to the view; Tab toggles mouse shift lock, Space jumps, left/right mouse slap/spit. Duplex duel input retains its 22-byte size, using the unused high flag bits for a jump counter.
-- Typed action codes and durations distinguish slap, spit, sword, bow and casting. Snapshot timers advance between packets, combo side is shared, and emotes use server age. Launch/contact effects follow the action phase. PvP checks both players in the ring at action and damage time; monster combat remains authoritative.
-- Selected spit-mouth-short.wav (0.36 seconds); supplied alternatives are 0.41 and 0.34 seconds. The source attribution from the unfinished restoration is retained: ErikH2000, Spitting.wav, CC0, https://freesound.org/people/ErikH2000/sounds/232211/ . Clip duration was inspected; no listening test was performed. Natural playback rate, separate impact audio, squared distance attenuation, stereo pan and bounded concurrent sounds.
-- Village roof gables, eaves, side windows, garden paths, forge tools, smith work surface and timed sparks, apothecary cauldron/herbs, fletcher bench and inn furniture complete the existing shop rebuild. Static details are batched.
-- Lower light-shaft sample costs and haze strength. Upsampling compares full scene depth rather than quantized depth packed into the scatter texture. Balanced shadows use 1024px; rendering keeps the existing resolution limits and frame cap. Actor resource disposal and effect limits added.
-- Main menu exposes Open Meadow, Host friend duel, Join friend duel, Practice, Google sign-in and Settings. Invite hashes take priority over automatic host/practice shortcuts.
-- Existing server-side Google verification, public client ID, account linking and private save paths retained. Local origin errors name the unauthorized origin. Official GIS loading has a timeout and retry support. No OAuth JSON or secret was opened or packaged.
+The construction function and movement/slap/spit animation expressions are extracted directly from D:\downloads\index.html into rpg-original-slime.mjs. The source file remains untouched. The original dome and skirt, dark eyes, blush, seven laurel leaves, fingered hands, outline thickness, toon ramp, mouth and slap timing are retained.
 
-## Validation and deployment
+The shared RPG rig adds clothing, job animations, equipment and cosmetic proportions around this source. Meadow players, the live menu preview and villagers use it. Duel/practice fighters also call the original factory and animation function. Wild creatures use the same visual language with species-specific wildlife features and shared hit reactions.
 
-The existing 23 tests passed before the user requested no tests. No tests or browser playtests were run after that instruction; final repairs are untested. No production deployment was performed. No measured performance improvement is claimed.
+## Character customization
 
-Deploy the matching Cloudflare Worker before the Vercel frontend. See GOOGLE-SETUP.md. Keep the existing Durable Object namespace and migration.
+The main menu has a live rotating preview and slap, spit, walk, jump and wave controls. Size, roundness, height, hands, eyes, custom color, laurel, cheeks and equipment visibility can be changed. Original resets the reference proportions. Appearance is cosmetic: combat stats, hitboxes and authoritative movement do not change. Validated appearance is stored with the character and sent in roster/appearance updates; it is not repeated in every world snapshot. Google account summaries include the saved appearance.
+
+## Enterable village
+
+Architecture retains the timber, colored roofs, plaster, signs and shop-specific detailing. Buildings have larger interiors, 4m open doorways (4.4m at the inn), real separate walls, floors and roofs. NPCs and workstations are inside. One layout module determines building transforms, NPC coordinates, collision walls and camera obstacles. Both the client and Worker use these walls. Village terrain is leveled and trees are excluded from the building footprints. The east exit and central plaza stay open.
+
+## Hunting areas
+
+Creatures are arranged into five habitats per tier rather than straight rows. Spawn selection excludes water and shore margins, paths, the village, the duel ring, obstacles and steep terrain. If a placement cannot be found it is skipped rather than falling back into water. Chasing, returning and lunging creatures are kept outside pond margins. Creature models use original slime anatomy plus wings, ears, shells, horns, foliage and other family details.
+
+## Interface
+
+The menu is centered on the character preview and direct mode choices. The bag has SVG item illustrations, category filters, equipped markers, quantity badges, empty slots and a persistent details/comparison pane. Supplies and materials have their own relevant actions instead of weapon comparisons.
+
+## Delivery
+
+No tests or browser playtests were run for this pass, as requested. The asset build only copies distribution files and does not prove runtime or visual correctness. Production was not deployed. Deploy the matching Worker before the frontend so village collision, enemy positions and appearance saves agree. Existing character keys, authentication verification and Durable Object namespace are retained. No private saves or OAuth secret files are included.

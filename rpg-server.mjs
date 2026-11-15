@@ -1,3 +1,5 @@
+import {sanitizeAppearance} from './rpg-appearance.mjs';
+import {containHuntingCreature,dryHuntingPoint} from './rpg-hunting.mjs';
 import {ITEMS,STARTERS,FIRST_DROP,NPCS,SPECIES,TIERS,TOWN,inTown,XP_TO_NEXT,makeSpawns,migrateCharacter,statsFor} from './rpg-content.mjs';
 import {MEADOW_SPAWN,containMeadow} from './meadow-map.mjs';
 import {actionTiming} from './rpg-actions.mjs';
@@ -12,7 +14,7 @@ export class RPGWorld {
  }
  enqueue(fn){const work=this.queue.then(fn);this.queue=work.catch(()=>{});return work;}
  roster(){return [...this.players.values()].filter(p=>p.joined&&p.character);}
- publicCharacter(p){return {id:p.id,level:p.character.level,weapon:p.character.gear.weapon,armor:p.character.gear.armor,maxHp:statsFor(p.character).maxHp};}
+ publicCharacter(p){return {id:p.id,appearance:p.character.appearance,level:p.character.level,weapon:p.character.gear.weapon,armor:p.character.gear.armor,maxHp:statsFor(p.character).maxHp};}
  character(p){send(p,{t:'rpg.character',character:p.character,hp:p.hp,mana:p.mana,stats:statsFor(p.character)});}
  async join(p,m,authenticatedKey=null){
   if(authenticatedKey){p.characterKey=authenticatedKey;}else{
@@ -24,6 +26,7 @@ export class RPGWorld {
   if(this.roster().length>=50)throw Error('Open Meadow is full. Try again shortly.');
   p.character=migrateCharacter(await this.storage.get(p.characterKey),{name:m.name,color:m.color,loadout:m.loadout,...m.legacy});
   p.character.name=String(m.name||p.character.name).replace(/[\x00-\x1f]/g,'').slice(0,16);p.character.color=Math.max(0,Math.min(3,Number(m.color??p.character.color)||0));p.name=p.character.name;p.color=p.character.color;p.ranks={};p.size=1;
+  p.character.appearance=sanitizeAppearance(m.appearance??p.character.appearance,p.character.color);
   // Only cosmetics are migrated from the old client. XP, gold and equipment are never accepted from it.
   const spread=Math.sqrt(this.roster().length)*1.2;
   p.x=MEADOW_SPAWN.x+Math.cos(p.id*2.4)*spread;p.z=MEADOW_SPAWN.z+Math.sin(p.id*2.4)*spread;p.hp=statsFor(p.character).maxHp;p.mana=statsFor(p.character).maxMana;p.rpgAttackUntil=0;p.rpgFocusUntil=0;p.rpgDodgeUntil=0;p.joined=true;p.rpg=true;
@@ -38,7 +41,9 @@ export class RPGWorld {
   const before=copy(p.character),c=p.character;let changed=false;
   const fail=message=>{throw Error(message);};
   try{
-   if(m.t==='rpg.save'){
+   if(m.t==='rpg.appearance'){
+    c.appearance=sanitizeAppearance(m.appearance,c.color);changed=true;
+   }else if(m.t==='rpg.save'){
     // A checkpoint can only save the server's current character, never client progress.
    }else if(m.t==='rpg.jump'){
     if(p.hp<=0||now<(p.jumpReady||0))fail('Wait until you land.');p.air=.7;p.jumpReady=now+750;this.broadcast({t:'rpg.fx',kind:'jump',who:p.id,x:p.x,z:p.z});
@@ -114,22 +119,22 @@ export class RPGWorld {
   this.pending=this.pending.filter(h=>h.at>now);
   for(const m of this.monsters){const s=SPECIES.find(s=>s.id===m.species),tier=TIERS.find(t=>t.level===m.tier);
    if(m.hp<=0){if(m.rewardPending){try{await this.reward(m);m.rewardPending=false;}catch{continue;}}if(now>=m.until){m.hp=m.maxHp;m.x=m.homeX;m.z=m.homeZ;m.phase='idle';m.generation++;m.damage.clear();}continue;}
-   let target=players.find(p=>p.id===m.target&&p.hp>0&&!inTown(p)&&dist(p,m)<22&&dist(m,{x:m.homeX,z:m.homeZ})<18);
-   if(!target){target=players.filter(p=>p.hp>0&&!inTown(p)&&dist(p,m)<(m.tier===1?6.5:9)).sort((a,b)=>dist(a,m)-dist(b,m))[0];m.target=target?.id||0;}
-   if(!target){m.phase='idle';const dx=m.homeX-m.x,dz=m.homeZ-m.z,len=Math.hypot(dx,dz);if(len>.3){m.x+=dx/len*dt*2;m.z+=dz/len*dt*2;}continue;}
+   let target=players.find(p=>p.id===m.target&&p.hp>0&&!inTown(p)&&dryHuntingPoint(p.x,p.z)&&dist(p,m)<22&&dist(m,{x:m.homeX,z:m.homeZ})<18);
+   if(!target){target=players.filter(p=>p.hp>0&&!inTown(p)&&dryHuntingPoint(p.x,p.z)&&dist(p,m)<(m.tier===1?6.5:9)).sort((a,b)=>dist(a,m)-dist(b,m))[0];m.target=target?.id||0;}
+   if(!target){m.phase='idle';const dx=m.homeX-m.x,dz=m.homeZ-m.z,len=Math.hypot(dx,dz);if(len>.3){m.x+=dx/len*dt*2;m.z+=dz/len*dt*2;containHuntingCreature(m);}continue;}
    const distance=dist(m,target),ranged=['line','lob','cone','bolt'].includes(s.pattern),reach=ranged?8:s.pattern==='slam'||s.pattern==='ring'?4.6:2.8;
    if(m.phase==='windup'&&now>=m.until){
     let struck=distance<reach+1;
     const facing=Math.abs(Math.atan2(Math.sin(Math.atan2(target.x-m.x,target.z-m.z)-m.angle),Math.cos(Math.atan2(target.x-m.x,target.z-m.z)-m.angle)));
     if(['line','bolt','charge','cone','pounce','lob'].includes(s.pattern))struck=struck&&facing<(s.pattern==='cone'?.75:.38);
-    if(s.pattern==='charge'||s.pattern==='pounce'){m.x+=Math.sin(m.angle)*2.5;m.z+=Math.cos(m.angle)*2.5;}
+    if(s.pattern==='charge'||s.pattern==='pounce'){m.x+=Math.sin(m.angle)*2.5;m.z+=Math.cos(m.angle)*2.5;containHuntingCreature(m);}
     if(struck&&now>=target.rpgDodgeUntil&&!inTown(target)&&!(s.pattern==='slam'&&target.air>.15)){const damage=Math.max(1,Math.round(s.damage*tier.damage)-statsFor(target.character).armor);target.hp=Math.max(0,target.hp-damage);this.broadcast({t:'rpg.fx',kind:'hurt',who:target.id,target:m.id,damage,x:target.x,z:target.z});if(!target.hp){send(target,{t:'rpg.down'});target.ix=target.iz=0;}}
     m.phase='recover';m.until=now+900;continue;
    }
    if(m.phase==='windup'||m.phase==='recover'&&now<m.until)continue;
    if(distance<reach){m.angle=Math.atan2(target.x-m.x,target.z-m.z);m.phase='windup';m.until=now+s.windup*1000;}
-   else{m.phase='walk';m.angle=Math.atan2(target.x-m.x,target.z-m.z);m.x+=Math.sin(m.angle)*dt*(2.3+m.tier*.06);m.z+=Math.cos(m.angle)*dt*(2.3+m.tier*.06);if(inTown(m)){m.x-=Math.sin(m.angle)*dt*3;m.z-=Math.cos(m.angle)*dt*3;}}
+   else{m.phase='walk';m.angle=Math.atan2(target.x-m.x,target.z-m.z);m.x+=Math.sin(m.angle)*dt*(2.3+m.tier*.06);m.z+=Math.cos(m.angle)*dt*(2.3+m.tier*.06);if(inTown(m)){m.x-=Math.sin(m.angle)*dt*3;m.z-=Math.cos(m.angle)*dt*3;}containHuntingCreature(m);}
   }
-  if(now-this.lastSnapshot>=150){this.lastSnapshot=now;const monsters=this.snapshot(),heroes=players.map(p=>({...this.publicCharacter(p),hp:Math.ceil(p.hp),mana:Math.floor(p.mana)}));for(const p of players)send(p,{t:'rpg.world',at:now,monsters:monsters.filter(m=>dist(m,p)<62),heroes});}
+  if(now-this.lastSnapshot>=150){this.lastSnapshot=now;const monsters=this.snapshot(),heroes=players.map(p=>{const {appearance,...hero}=this.publicCharacter(p);return {...hero,hp:Math.ceil(p.hp),mana:Math.floor(p.mana)};});for(const p of players)send(p,{t:'rpg.world',at:now,monsters:monsters.filter(m=>dist(m,p)<62),heroes});}
  }
 }
