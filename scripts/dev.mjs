@@ -1,0 +1,15 @@
+import {spawn,spawnSync} from 'node:child_process';
+import {homedir} from 'node:os';
+import {join,parse,resolve} from 'node:path';
+import {createServer} from 'node:net';
+import {prepareSaveDirectory} from './save-directory.mjs';
+const project=resolve(import.meta.dirname,'..');
+await new Promise((resolve,reject)=>{const probe=createServer();probe.once('error',()=>reject(Error('Port 8787 is already in use. Stop the other Slimoo server before starting this copy.')));probe.listen(8787,'0.0.0.0',()=>probe.close(resolve));});
+const root=parse(project).root;
+const defaultDirectory=process.platform==='win32'&&/^D:\\$/i.test(root)?join(root,'SlimooData'):join(homedir(),'.slimoo','saves');
+const saveDirectory=resolve(process.env.SLIMOO_SAVE_DIR||process.env.SLIMEOO_SAVE_DIR||defaultDirectory);
+const {migrated}=await prepareSaveDirectory(join(project,'.wrangler','state'),saveDirectory);
+console.log('Slimoo local saves: '+saveDirectory+(migrated?' (previous saves migrated)':''));
+const build=spawnSync(process.execPath,[join(project,'scripts','build.mjs')],{cwd:project,stdio:'inherit'});if(build.status!==0)process.exit(build.status||1);
+const server=spawn(process.execPath,[join(project,'node_modules','wrangler','bin','wrangler.js'),'dev','--local','--ip','0.0.0.0','--port','8787','--persist-to',saveDirectory],{cwd:project,stdio:'inherit'});
+server.once('exit',code=>process.exit(code||0));process.once('SIGINT',()=>server.kill('SIGINT'));process.once('SIGTERM',()=>server.kill('SIGTERM'));

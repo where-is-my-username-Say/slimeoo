@@ -1,0 +1,22 @@
+import * as T from './vendor/three.module.js';
+import {NPCS,TOWN} from './rpg-content.mjs';
+import {meadowHeight} from './meadow-map.mjs';
+import {part,slimeModel} from './rpg-actors.mjs';
+export function makeVillage(scene){const root=new T.Group(),npcs=new Map(),animated=[];scene.add(root);const box=new T.BoxGeometry(1,1,1),cone=new T.ConeGeometry(1,1,4),cyl=new T.CylinderGeometry(1,1,1,10),sphere=new T.SphereGeometry(1,10,8);
+ const make=(group,geo,col,p,s)=>{const m=part(group,geo,col,p,s);m.castShadow=true;m.receiveShadow=true;return m;};
+ for(const n of NPCS){const actor=slimeModel(n.color,n.animation);actor.root.position.set(n.x,meadowHeight(n.x,n.z),n.z);actor.root.rotation.y=.1;root.add(actor.root);npcs.set(n.id,actor);
+  const place=new T.Group();place.position.set(n.x,meadowHeight(n.x,n.z),n.z-3.5);root.add(place);
+  if(n.id==='pip'){make(place,cyl,'#917f62',[0,.22,0],[1.8,.45,1.8]);make(place,box,'#6a7f63',[0,1.9,0],[2.6,1.6,.2]);make(place,box,'#cdbb8b',[0,1.9,.14],[2.1,1.2,.04]);for(const x of [-1,1])make(place,cyl,'#76634c',[x,1,0],[.1,2,.1]);continue;}
+  if(n.id==='ember'){make(place,box,'#736e66',[0,.3,0],[5,.6,4]);make(place,box,'#a08d7a',[-1,1.5,-1],[2,2.5,2]);make(place,cyl,'#736c66',[-1,4.1,-1],[.55,3,.55]);make(place,box,'#302f33',[-1,1.2,.1],[1.1,1.3,.1]);const fire=make(place,new T.OctahedronGeometry(1),'#f6a84f',[-1,1.1,.3],[.45,.6,.4]);animated.push({m:fire,type:'fire'});make(place,box,'#646a6b',[1,1.05,.4],[1.3,.3,.65]);make(place,box,'#596061',[1,.65,.4],[.5,.7,.45]);for(let i=0;i<3;i++)make(place,cyl,'#775c42',[.7+i*.5,.4,-.8],[.18,1,.18]).rotation.z=Math.PI/2;}
+  else if(n.id==='luma'){make(place,cyl,'#b7a5c4',[0,1.6,-.5],[1.7,3.2,1.7]);make(place,new T.ConeGeometry(2.2,2.7,6),'#79638f',[0,4.4,-.5],[1,1,1]);const crystal=make(place,new T.OctahedronGeometry(.55),'#c6b1eb',[0,6,-.5],[1,1,1]);animated.push({m:crystal,type:'float'});make(place,box,'#68586e',[0,.8,1.25],[2,.35,.7]);}
+  else if(n.id==='moss'){make(place,cyl,'#d8c9a6',[0,1.05,0],[1.8,2.1,1.8]);make(place,sphere,'#9584b8',[0,2.4,0],[2.7,.85,2.7]);for(let i=0;i<6;i++)make(place,sphere,'#e5d7b7',[Math.sin(i*2)*1.6,3.04,Math.cos(i*2)*1.6],[.2,.08,.2]);make(place,cyl,'#5d6465',[0,.65,2.0],[.7,.8,.7]);const brew=make(place,cyl,'#bdabd7',[0,1.07,2],[.6,.02,.6]);animated.push({m:brew,type:'brew'});}
+  else if(n.id==='tansy'){for(const x of [-2,2])make(place,cyl,'#8c7153',[x,1.5,0],[.09,3,.09]);make(place,cone,'#9ca97b',[0,3,0],[3,.8,2.7]).rotation.y=Math.PI/4;make(place,box,'#a5865c',[0,.95,.5],[3,.2,1.4]);for(let i=0;i<4;i++)make(place,cyl,'#d6c696',[-1+i*.6,1.3,.5],[.035,.7,.035]).rotation.z=.5;}
+  else if(n.id==='mallow'){make(place,box,'#d5be99',[0,1.6,0],[5,3.2,3.6]);make(place,cone,'#a1746e',[0,3.6,0],[4.1,1.8,3.2]).rotation.y=Math.PI/4;make(place,box,'#776353',[0,.9,1.85],[1.1,1.8,.1]);for(const x of [-1.6,1.6])make(place,box,'#edcc86',[x,1.7,1.85],[.8,.9,.08]);make(place,cyl,'#806750',[2.7,1.7,1.8],[.1,3.4,.1]);const sign=make(place,box,'#b89f6f',[3.3,2.7,1.8],[1.1,.8,.12]);animated.push({m:sign,type:'sign'});}
+  else if(n.id==='scrip'){make(place,box,'#977452',[0,.75,0],[3,.6,1.8]);for(const x of [-1.4,1.4])for(const z of [-.65,.65])make(place,cyl,'#665f4e',[x,.4,z],[.48,.15,.48]).rotation.z=Math.PI/2;make(place,cone,'#c8aa76',[0,2.5,0],[2.8,.6,2.3]).rotation.y=Math.PI/4;for(let i=0;i<3;i++)make(place,box,['#b4a0be','#99b6a0','#cfb380'][i],[-.8+i*.8,1.4,0],[.6,.7,.7]);}
+  else if(n.id==='fern'){make(place,box,'#a68d65',[0,1,0],[2.4,.2,1.4]);make(place,box,'#d6d4b4',[0,1.15,0],[1.9,.06,1.1]);for(const x of [-.9,.9])make(place,cyl,'#7f7053',[x,.5,0],[.1,1,.1]);}
+ }
+ const townRing=part(root,new T.RingGeometry(TOWN.radius-.12,TOWN.radius,100),'#d1d7a5',[TOWN.x,meadowHeight(TOWN.x,TOWN.z)+.07,TOWN.z]);townRing.rotation.x=-Math.PI/2;townRing.material.transparent=true;townRing.material.opacity=.5;
+ const duel=part(root,new T.RingGeometry(8.65,8.9,64),'#c9a778',[0,.09,0]);duel.rotation.x=-Math.PI/2;
+ for(const x of [5,51,95]){const gate=new T.Group();gate.position.set(x,meadowHeight(x,9),9);root.add(gate);for(const side of [-1,1])make(gate,cyl,'#93816b',[0,1.7,side*2],[.12,3.4,.12]);make(gate,box,x===5?'#92b18c':x===51?'#b9a170':'#a58cb7',[0,3.3,0],[.22,.7,4.8]);}
+ return {root,npcs,update(t){for(const [id,a]of npcs)a.animate(t,0);for(const {m,type}of animated){if(type==='fire')m.scale.y=.6+Math.sin(t*12)*.12;if(type==='float'){m.rotation.y=t*.7;m.position.y=6+Math.sin(t*2)*.2;}if(type==='brew')m.scale.x=.6+Math.sin(t*3)*.02;if(type==='sign')m.rotation.z=Math.sin(t)*.06;}}};
+}

@@ -56,8 +56,9 @@ export function createMeadowLighting(T, renderer, sun, direction) {
     sceneTarget.texture.encoding = renderer.outputEncoding;
     sceneTarget.depthTexture = new T.DepthTexture(1, 1, T.UnsignedIntType);
     sceneTarget.depthTexture.minFilter = sceneTarget.depthTexture.magFilter = T.NearestFilter;
-    scatterTarget = new T.WebGLRenderTarget(1, 1, { minFilter:T.NearestFilter, magFilter:T.NearestFilter, depthBuffer:false, stencilBuffer:false });
-    const steps = quality === 2 ? 17 : 10;
+    const floating=renderer.capabilities.isWebGL2&&renderer.extensions.has('EXT_color_buffer_float');
+    scatterTarget = new T.WebGLRenderTarget(1, 1, { type:floating?T.HalfFloatType:T.UnsignedByteType,minFilter:T.LinearFilter, magFilter:T.LinearFilter, depthBuffer:false, stencilBuffer:false });
+    const steps = quality === 2 ? 48 : 28;
     const sunTexel = new T.Vector2();
     rays = new T.ShaderMaterial({
       vertexShader:fullscreenVertex, depthWrite:false, depthTest:false, toneMapped:false,
@@ -103,7 +104,7 @@ export function createMeadowLighting(T, renderer, sun, direction) {
             float visibility = litBySun(position);
             integral += density*(.095 + .905*visibility)*exp(-travel*.019);
           }
-          float scatter = integral*stepLength*forwardScatter*.016;
+          float scatter = integral*stepLength*forwardScatter*.032;
           gl_FragColor = vec4(clamp(scatter,0.,1.),surface/clipRange.y,0.,1.);
         }
       `
@@ -136,7 +137,7 @@ export function createMeadowLighting(T, renderer, sun, direction) {
           }
           vec3 color=texture2D(sceneColor,vUv).rgb;
           float light=sum/max(.0001,weight);
-          color=mix(color,vec3(1.,.922,.783),light*.41);
+          color=mix(color,vec3(1.,.922,.783),light*.58);
           gl_FragColor=vec4(color,1.);
         }
       `
@@ -156,9 +157,9 @@ export function createMeadowLighting(T, renderer, sun, direction) {
     const width = Math.max(2,viewport.x), height = Math.max(2,viewport.y);
     if (sceneTarget.width !== width || sceneTarget.height !== height) {
       sceneTarget.setSize(width,height);
-      const pixelStride = quality === 2 ? 4 : 5;
-      const maxWidth = quality === 2 ? 416 : 236;
-      const maxHeight = quality === 2 ? 256 : 144;
+      const pixelStride = quality === 2 ? 2 : 3;
+      const maxWidth = quality === 2 ? 960 : 640;
+      const maxHeight = quality === 2 ? 540 : 360;
       const scale = Math.min(1/pixelStride,maxWidth/width,maxHeight/height);
       scatterTarget.setSize(Math.max(2,Math.round(width*scale)),Math.max(2,Math.round(height*scale)));
       final.uniforms.scatterSize.value.set(scatterTarget.width,scatterTarget.height);

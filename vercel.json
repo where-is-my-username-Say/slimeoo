@@ -1,0 +1,1 @@
+{"buildCommand":"npm run build","outputDirectory":"dist","rewrites":[{"source":"/api/auth/:path*","destination":"https://slimeoo-multiplayer.balochnajool.workers.dev/api/auth/:path*"}],"headers":[{"source":"/(.*)","headers":[{"key":"Cross-Origin-Opener-Policy","value":"same-origin-allow-popups"}]}]}

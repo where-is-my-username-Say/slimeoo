@@ -1,5 +1,5 @@
 /* Open Meadow geometry and horizontal collision, shared with the Durable Object. */
-export const MAP_REVISION = 'meadow-2';
+export const MAP_REVISION = 'meadow-3-rpg';
 export const MEADOW_BOUNDS = Object.freeze({ x: 136, z: 113 });
 export const MEADOW_SPAWN = Object.freeze({ x: -24, z: 15, r: 2.06 });
 
@@ -113,7 +113,7 @@ const trees = [
   { x:-46,z:-22,s:1.53,form:0 }, { x:-65,z:-42,s:1.54,form:1 },
   { x:41,z:44,s:1.26,form:0 }, { x:66,z:57,s:1.05,form:1 },
   { x:56,z:-42,s:1.42,form:0 }, { x:70,z:-52,s:1.22,form:1 }
-];
+].filter(t=>Math.hypot(t.x+24,t.z-15)>=25&&!(t.x>0&&t.x<126&&t.z>-106&&t.z<108));
 const forestPatches = [
   [-84,-33,32,28,28,.25], [-58,-60,30,26,24,.58], [-30,-38,17,24,14,.49],
   [-84,15,25,29,19,.40], [-44,39,21,20,13,.20], [17,63,37,28,24,.35],
@@ -121,6 +121,7 @@ const forestPatches = [
   [111,-28,24,26,12,.57]
 ];
 function canPlant(x, z, radius = 0) {
+  if(Math.hypot(x+24,z-15)<25 || (x>0&&x<126&&z>-106&&z<108))return false;
   if (Math.hypot(x / 142, z / 119) > 1 || Math.hypot(x + 24, z - 15) < 5.5 ||
       Math.hypot(x, z) < 14 || trailAmount(x, z) > .17 ||
       PONDS.some(p => pondRadius(p, x, z) < 1.12)) return false;

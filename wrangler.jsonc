@@ -3,6 +3,13 @@
   "name": "slimeoo-multiplayer",
   "main": "worker.js",
   "compatibility_date": "2026-11-14",
+  "vars": {
+    "GOOGLE_CLIENT_ID":"821860457326-607rr7imo5ofj88j44n05d40r5sn5k66.apps.googleusercontent.com",
+    "PUBLIC_SITE_ORIGIN":"https://slimeoo-plum.vercel.app",
+    "GOOGLE_ORIGINS":"https://slimeoo-plum.vercel.app"
+  },
+  "build": {"command":"node scripts/build.mjs"},
+  "assets": {"directory":"./dist","binding":"ASSETS","run_worker_first":["/health","/room/*","/api/*"]},
   "durable_objects": {
     "bindings": [
       { "name": "GAME_ROOM", "class_name": "GameRoom" }
