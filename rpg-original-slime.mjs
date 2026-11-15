@@ -13,6 +13,17 @@ function makeSlime(color){const g=new T.Group(),jelly=new T.Group();g.add(jelly)
 const result=makeSlime(0);scene.remove(result.g);result.shadow.castShadow=false;result.shadow.receiveShadow=false;
 result.leaves=result.jelly.children.filter(o=>o.material?.color?.getHex()===0xb7a15f);
 result.cheeks=result.face.children.filter(o=>o.material?.color?.getHex()===0xdb9c91);
+result.eyeHighlights=result.face.children.filter(o=>o.material?.color?.getHex()===0xf2f7e9);
+// Keep the reference's face shapes and X/Y layout. Seat the small features on the
+// curved dome instead of letting its opaque surface swallow the smile and blush.
+for(const feature of [...result.eyes,...result.cheeks,result.smile,result.mouth]){
+ const x=feature.position.x,y=feature.position.y+result.face.position.y;
+ const surface=Math.sqrt(Math.max(0,1.15**2-x*x-((y-.62)/.84)**2));
+ feature.position.z=Math.max(feature.position.z,surface-result.face.position.z+.008);
+ feature.castShadow=false;
+}
+for(const highlight of result.eyeHighlights)highlight.castShadow=false;
+applyOriginalEyeSize(result,1);
 const geometries=new Set(),materials=new Set();result.g.traverse(o=>{if(o.geometry)geometries.add(o.geometry);if(o.material)materials.add(o.material);});result.disposeOriginal=()=>{for(const g of geometries)g.dispose();for(const m of materials)m.dispose();ramp.dispose();};
 return result;
 }
@@ -23,9 +34,29 @@ m.jelly.rotation.x=0;m.jelly.rotation.y=0;
 const wind=slapping?Math.sin(Math.min(1,progress/.34)*Math.PI/2):0,release=slapping?clamp((progress-.32)/.28,0,1):0,recovery=slapping?clamp((progress-.62)/.38,0,1):0,puff=spitting?Math.sin(progress*Math.PI):0;
 const sy=1+hop*.11-speed*.04-(slapping?Math.sin(progress*Math.PI)*.10:0)+puff*.06;
 const sx=1/Math.sqrt(Math.max(.6,sy));m.jelly.scale.set(sx+puff*.09,sy,sx+puff*.09);m.jelly.position.y=hop*.14;m.jelly.rotation.z=Math.sin(clock*9)*speed*.025+(slapping?(p.combo===1?-1:1)*Math.sin(progress*Math.PI)*.14:0);
-m.bodyMat.color.set(COLORS[p.color]);m.bodyMat.emissive.setScalar(p.hit>0?.5:0);m.face.rotation.x=-speed*.07;m.eyes.forEach(e=>e.scale.y=(clock+i)%4<.1?.2:1.35);m.shadow.scale.setScalar(1-hop*.08);m.smile.visible=!spitting;m.mouth.scale.y=spitting?.3+puff*1.7:.10;
+m.bodyMat.color.set(COLORS[p.color]);m.bodyMat.emissive.setScalar(p.hit>0?.5:0);m.face.rotation.set(-speed*.07,0,0);m.eyes.forEach(e=>e.scale.set(.75,(clock+i)%4<.1?.2:1.35,.5));m.shadow.scale.setScalar(1-hop*.08);m.smile.visible=!spitting;m.mouth.visible=true;m.mouth.scale.set(1,spitting?.3+puff*1.7:.10,.35);applyOriginalEyeSize(m,1);
 for(const arm of m.arms){const active=slapping&&arm.side===(p.combo===1?-1:1);const strength=active?Math.sin(progress*Math.PI):0;arm.pivot.scale.setScalar(.55+strength*.8);arm.pivot.rotation.set(0,active?arm.side*(wind*1.3-release*3.0)*(1-recovery):arm.side*.15,arm.side*(.12+Math.sin(clock*4+i)*.06));arm.pivot.position.z=active?release*(1-recovery)*1.6:.10;arm.palm.rotation.y=active?-arm.side*.6:0;arm.palm.rotation.z=active?arm.side*-.22:arm.side*.2;}
 
+}
+export function applyOriginalEyeSize(m,size=1){
+ for(const eye of m.eyes){
+  eye.scale.x=.75*size;eye.scale.y*=size;eye.scale.z=.5*size;
+ }
+ syncOriginalEyeHighlights(m);
+}
+function syncOriginalEyeHighlights(m){
+ for(let i=0;i<m.eyes.length;i++){
+  const eye=m.eyes[i],highlight=m.eyeHighlights[i],size=eye.scale.x/.75;
+  if(!highlight)continue;
+  const blink=Math.min(1,eye.scale.y/(1.35*size));
+  highlight.position.set(eye.position.x-.02*size,eye.position.y+.05*size*blink,eye.position.z+.057*size);
+  highlight.scale.set(size,size*blink,size);
+ }
+}
+export function applyOriginalHurtFace(m,size=1){
+ m.eyes.forEach(e=>e.scale.set(1.15*size,.25*size,.5*size));
+ m.mouth.scale.set(1.8,1.6,.35);m.mouth.visible=true;m.smile.visible=false;
+ syncOriginalEyeHighlights(m);
 }
 export function createOriginalSpit(T,color){
  const root=new T.Group(),material=new T.MeshStandardMaterial({color,emissive:color,emissiveIntensity:.4,roughness:.1,transparent:true,opacity:.93}),geometry=new T.SphereGeometry(1,12,8),core=new T.Mesh(geometry,material);root.add(core);const blobs=[];
@@ -38,6 +69,6 @@ export function animateOriginalSpit(root,time,phase=0){const {core,blobs}=root.u
 
 export function reactOriginalSlime(m,dt,time){
 const t=m.reaction||(m.reaction={a:0,b:0,va:0,vb:0,s:0,vs:0});t.va+=(-90*t.a-9*t.va)*dt;t.vb+=(-90*t.b-9*t.vb)*dt;t.vs+=(-120*t.s-8*t.vs)*dt;t.a+=t.va*dt;t.b+=t.vb*dt;t.s+=t.vs*dt;m.g.rotation.x=t.b;m.g.rotation.z=t.a;m.jelly.scale.y*=1+t.s;m.jelly.scale.x*=1-t.s*.5;m.jelly.scale.z*=1-t.s*.5;
-if(time<(m.hurtUntil||0)){m.eyes.forEach(e=>e.scale.set(1.15,.25,.5));m.mouth.scale.set(1.8,1.6,.35);m.smile.visible=false;for(const a of m.arms)a.pivot.rotation.z+=Math.sin(time*40)*.5;}
+if(time<(m.hurtUntil||0)){applyOriginalHurtFace(m,m.eyes[0].scale.x/.75);for(const a of m.arms)a.pivot.rotation.z+=Math.sin(time*40)*.5;}
 else{m.mouth.scale.x=1;m.mouth.scale.z=.35;}
 }

@@ -31,14 +31,14 @@ export const ITEMS=Object.fromEntries([
 export const STARTERS={sword:'twigblade',bow:'reedbow',spell:'cinder'};
 export const FIRST_DROP={sword:'dewblade',bow:'dewbow',spell:'dewspell'};
 export const NPCS=[
- {id:'pip',name:'Pip',title:'Village warden',role:'quest',x:-20,z:16,color:'#9ed990',animation:'wave',say:'Every great slime begins with one small hunt. Follow the east path into Dewwild Farm.'},
+ {id:'pip',name:'Pip',title:'Village warden',role:'quest',x:-20,z:16,color:'#9ed990',animation:'wave',say:'Every great slime begins with one small hunt. Follow the east path into the wildlands. Each creature has its own home; read the trail signs.'},
  {id:'ember',name:'Ember',title:'Wildglass smith',role:'smith',x:-33,z:5,color:'#eea16e',animation:'hammer',say:'Good steel is grown, then forged. Bring me 3 wildglass shards and 12 gold.',stock:['ironblade','ironvest']},
  {id:'moss',name:'Moss',title:'Dewdrop apothecary',role:'potions',x:-14,z:3,color:'#b5c1e8',animation:'stir',say:'A tonic for the brave. Rest in town to heal for free.',stock:['potion']},
  {id:'tansy',name:'Tansy',title:'Willow fletcher',role:'shop',x:-37,z:21,color:'#d9bd72',animation:'string',say:'Keep your distance. Let the wildglass do the rest.',stock:['dewbow','ironbow']},
  {id:'luma',name:'Luma',title:'Sunpetal arcanist',role:'shop',x:-12,z:25,color:'#b9a0df',animation:'levitate',say:'An ember is a promise. Cast, move, and cast again.',stock:['dewspell','ironspell']},
  {id:'mallow',name:'Mallow',title:'The Drifting Acorn inn',role:'inn',x:-29,z:29,color:'#e5bbc9',animation:'bow',say:'Welcome home, wanderer. Your progress is already safe with us.'},
  {id:'scrip',name:'Scrip',title:'Traveling outfitter',role:'shop',x:-26,z:-1,color:'#8acbc5',animation:'count',say:'Buy the things you need. Sell only what you can spare.',stock:['dewblade','dewvest']},
- {id:'fern',name:'Fern',title:'Farm cartographer',role:'map',x:-7,z:13,color:'#a6d0a7',animation:'read',say:'One farm, three trails. Green is level 1, amber is level 5, violet is level 10. Watch their windups.'},
+ {id:'fern',name:'Fern',title:'Farm cartographer',role:'map',x:-7,z:13,color:'#a6d0a7',animation:'read',say:'Twenty-five habitats, each with its own resident species. Use the numbered atlas to find them. Green is level 1, amber is 5, violet is 10.'},
 ].map(n=>{const b=buildingFor(n.id);return {...n,...villagePoint(b,...b.npc),building:n.id,yaw:b.yaw};});
 // 25 authored families. Each has three server-spawned variants, not palette-only duplicates.
 export const SPECIES=[

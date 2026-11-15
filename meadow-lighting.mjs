@@ -13,14 +13,14 @@ export const skyGlsl = `
   }
   vec3 meadowSky(vec3 ray, vec3 sunDir) {
     float h = max(0., ray.y);
-    vec3 sky = mix(vec3(.59,.68,.58), vec3(.225,.471,.622), smoothstep(0., .62, h));
-    sky = mix(sky,vec3(.106,.287,.48),smoothstep(.42,1.,h)*.82);
+    vec3 sky = mix(vec3(.45,.53,.51), vec3(.25,.39,.47), smoothstep(0., .62, h));
+    sky = mix(sky,vec3(.17,.29,.38),smoothstep(.42,1.,h)*.82);
     vec2 p = ray.xz * (4.8 + 9.5*h) + vec2(1.2,7.9);
     float clouds = skyNoise(p)*.58 + skyNoise(p*2.10+7.3)*.28 + skyNoise(p*4.32)*.14;
     float layer = smoothstep(.52,.68,clouds)*smoothstep(.045,.15,h)*(1.-smoothstep(.46,.77,h));
-    vec3 color = mix(sky,mix(vec3(.70,.76,.74),vec3(.98,.95,.84),smoothstep(.55,.75,clouds)),layer*.84);
+    vec3 color = mix(sky,mix(vec3(.70,.76,.74),vec3(.79,.80,.75),smoothstep(.55,.75,clouds)),layer*.84);
     float facing = max(0.,dot(ray,sunDir));
-    color += vec3(.19,.143,.082)*pow(facing,42.);
+    color += vec3(.09,.075,.05)*pow(facing,42.);
     color = mix(color,vec3(1.,.935,.72),smoothstep(.99915,.99962,facing));
     return color;
   }
@@ -104,7 +104,7 @@ export function createMeadowLighting(T, renderer, sun, direction) {
             float visibility = litBySun(position);
             integral += density*visibility*exp(-travel*.019);
           }
-          float scatter = integral*stepLength*forwardScatter*.012;
+          float scatter = integral*stepLength*forwardScatter*.007;
           gl_FragColor = vec4(clamp(scatter,0.,.45),0.,0.,1.);
         }
       `
@@ -137,7 +137,7 @@ export function createMeadowLighting(T, renderer, sun, direction) {
           }
           vec3 color=texture2D(sceneColor,vUv).rgb;
           float light=sum/max(.0001,weight);
-          color=mix(color,vec3(1.,.922,.783),light*.58);
+          color=mix(color,vec3(1.,.922,.783),light*.32);
           gl_FragColor=vec4(color,1.);
         }
       `

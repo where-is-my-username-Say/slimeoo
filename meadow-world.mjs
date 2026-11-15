@@ -1,3 +1,4 @@
+import {HABITATS} from './rpg-habitats.mjs';
 import {
   MAP_REVISION, MEADOW_BOUNDS, MEADOW_SPAWN, PONDS, MEADOW_TREES, MEADOW_BOULDERS,
   meadowRandom, meadowHeight, pondRadius, pondBankHeight, trailAmount, containMeadow, meadowCoverNear, meadowWaterPace
@@ -23,8 +24,8 @@ export function createMeadow(T, renderer, sun) {
   const random = meadowRandom(12698);
   const time = { value: 0 }, sway = { value: 0 };
   const lightDirection = new T.Vector3(-.53, .43, -.73).normalize();
-  const look = { lightDirection, fog: new T.FogExp2(0xbbc9b4, .0063), sky: 0xbbc9b4,
-    hemi: 0xd6e3dd, ground: 0x61755b, sun: 0xffead0, hemiPower: .68, sunPower: 1.44, rimPower: .17 };
+  const look = { lightDirection, fog: new T.FogExp2(0x8d9e98, .009), sky: 0x8d9e98,
+    hemi: 0xd6e3dd, ground: 0x61755b, sun: 0xffead0, hemiPower: .60, sunPower: 1.15, rimPower: .17 };
   const lighting = createMeadowLighting(T, renderer, sun, lightDirection);
   const lod = [];
   const frameSphere = new T.Sphere(new T.Vector3(), 1);
@@ -162,12 +163,12 @@ export function createMeadow(T, renderer, sun) {
     x: t.x - lightDirection.x * 2.1 * t.s, z: t.z - lightDirection.z * 2.1 * t.s, s: t.s
   }));
   const earth = {
-    grass: earthColor(0x899e69), sage: earthColor(0x607f57), clearing: earthColor(0x9ea870),
-    path: earthColor(0xb1a17a), fern: earthColor(0x586e53), rock: earthColor(0x839184),
-    sand: earthColor(0xa8a68a), silt: earthColor(0x57766b), basin: earthColor(0x345b57)
+    grass: earthColor(0x768765), sage: earthColor(0x596e55), clearing: earthColor(0x899274),
+    path: earthColor(0x9a8e77), fern: earthColor(0x586e53), rock: earthColor(0x839184),
+    sand: earthColor(0x969582), silt: earthColor(0x57766b), basin: earthColor(0x345b57)
   };
-  const terrainColor = new T.Color();
-  function paintGround(x, y, z, slope, color, shade) {
+  const terrainColor = new T.Color(),habitatPaint=HABITATS.map(h=>({...h,tint:earthColor(h.color)})),groundTiles=[];
+  function paintGround(x, y, z, slope, color, shade, habitats) {
     const swatch = .49 + Math.sin(x * .11 + z * .071) * .19 + Math.cos(z * .185 - x * .058) * .15 +
       Math.sin(z * .53 + x * .34) * .055;
     color.copy(earth.sage).lerp(earth.grass, swatch);
@@ -179,6 +180,7 @@ export function createMeadow(T, renderer, sun) {
     color.lerp(earth.clearing, open * .60);
     color.lerp(earth.fern, .48 * (1 - ease(15, 55, Math.hypot(x + 68, z + 39))));
     color.lerp(earth.rock, .61 * ease(.27, .57, slope));
+    for(const home of habitats){const blend=1-ease(home.radius*.5,home.radius+5,Math.hypot(x-home.x,z-home.z));if(blend>0)color.lerp(home.tint,blend*.72);}
     const path = trailAmount(x, z);
     if (path > 0) color.lerp(earth.path, path * (.77 + .10 * Math.sin(x * .9 + z * 1.4)));
     for (const p of PONDS) {
@@ -204,6 +206,7 @@ export function createMeadow(T, renderer, sun) {
     const colors = new Float32Array(count * 3), uv = new Float32Array(count * 2);
     const indices = new Uint16Array(subdivisions * subdivisions * 6);
     const width = subdivisions + 1, step = tileSize / subdivisions;
+    const habitats=habitatPaint.filter(h=>h.x>cx-24&&h.x<cx+tileSize+24&&h.z>cz-24&&h.z<cz+tileSize+24);
     const shade = shadeSources.filter(t=>t.x>=cx-6&&t.x<=cx+tileSize+6&&t.z>=cz-6&&t.z<=cz+tileSize+6);
     for (let z = 0, i = 0, k = 0; z < width; z++) {
       for (let x = 0; x < width; x++, i++) {
@@ -213,7 +216,7 @@ export function createMeadow(T, renderer, sun) {
         const length = Math.hypot(dx, 1, dz);
         vertices.set([wx, y, wz], i * 3);
         normals.set([dx/length, 1/length, dz/length], i * 3);
-        paintGround(wx, y, wz, Math.hypot(dx, dz), terrainColor, shade).toArray(colors, i * 3);
+        paintGround(wx, y, wz, Math.hypot(dx, dz), terrainColor, shade, habitats).toArray(colors, i * 3);
         uv.set([wx * .42, wz * .42], i * 2);
         if (z < subdivisions && x < subdivisions) {
           indices.set([i, i + width, i + 1, i + 1, i + width, i + width + 1], k);
@@ -232,6 +235,7 @@ export function createMeadow(T, renderer, sun) {
     ground.receiveShadow = true;
     ground.castShadow = !PONDS.some(p=>p.x>=cx-12 && p.x<=cx+tileSize+12 && p.z>=cz-12 && p.z<=cz+tileSize+12);
     ground.matrixAutoUpdate=false;
+    groundTiles.push({mesh:ground,x:cx+tileSize/2,z:cz+tileSize/2});
   }
 
   const tiles = new Map();
@@ -242,12 +246,11 @@ export function createMeadow(T, renderer, sun) {
       stones: [], moss: [], shrubs: [], grass: [], extraGrass: [], flowers: [], blossoms: [], rushes: [], seedheads: [] });
     return tiles.get(key);
   }
-  for (let x = -168; x < 168; x += tileSize) {
-    for (let z = -140; z < 140; z += tileSize) {
-      if (Math.hypot((x + 14) / 188, (z + 14) / 158) > 1) continue;
-      groundTile(x,z,20);
-      if (Math.hypot((x + 14)/145, (z + 14)/122) < 1.06) tile(x + 14,z + 14);
-    }
+  const extentX=Math.ceil((MEADOW_BOUNDS.x+28)/tileSize)*tileSize,extentZ=Math.ceil((MEADOW_BOUNDS.z+28)/tileSize)*tileSize;
+  for(let x=-extentX;x<extentX;x+=tileSize)for(let z=-extentZ;z<extentZ;z+=tileSize){
+    if(Math.hypot((x+14)/(MEADOW_BOUNDS.x+35),(z+14)/(MEADOW_BOUNDS.z+35))>1)continue;
+    groundTile(x,z,Math.abs(x)<140&&Math.abs(z)<112?20:14);
+    if(Math.hypot((x+14)/MEADOW_BOUNDS.x,(z+14)/MEADOW_BOUNDS.z)<1.04)tile(x+14,z+14);
   }
 
   const rockGeo = new T.IcosahedronGeometry(1, 1);
@@ -356,7 +359,7 @@ export function createMeadow(T, renderer, sun) {
   for (const group of tiles.values()) {
     for (let i = 0; i < 152; i++) {
       const x = group.x + random()*tileSize, z = group.z + random()*tileSize;
-      if (Math.hypot(x/140,z/117)>1 || Math.hypot(x,z)<10.8 || trailAmount(x,z)>.17 ||
+      if (Math.hypot(x/MEADOW_BOUNDS.x,z/MEADOW_BOUNDS.z)>1 || Math.hypot(x,z)<10.8 || trailAmount(x,z)>.17 ||
           PONDS.some(p=>pondRadius(p,x,z) < 1.025)) continue;
       const growth = .60 + .20*Math.sin(z*.37+x*.18) + .19*Math.cos(x*.47-z*.10);
       if (random() > growth) continue;
@@ -396,7 +399,7 @@ export function createMeadow(T, renderer, sun) {
       treeLod.push({high,low,center:high.geometry.boundingSphere.center});
     }
     batch(crownGeo,leaves,group.tips,{reflect:false,detail:[0,31,53],name:'Near canopy leaves'});
-    batch(rockGeo,stone,group.stones,{cast:true,name:'Meadow rocks'});
+    batch(rockGeo,stone,group.stones,{cast:true,detail:[65,95,125],name:'Meadow rocks'});
     batch(rockGeo,stone,group.moss,{detail:[18,34,52],name:'Rock moss'});
     batch(crownGeo,leaves,group.shrubs,{reflect:false,detail:[23,41,60],name:'Low shrubs'});
     batch(blades,grassMaterial,group.grass,{reflect:false,detail:[26,39,56],name:'Grass clumps'});
@@ -409,8 +412,8 @@ export function createMeadow(T, renderer, sun) {
 
   const farRidges = [];
   for (let i=0; i<38; i++) {
-    const a=i*tau/38, width=12+random()*21, h=7+random()*17, distance=161+random()*38;
-    farRidges.push([Math.cos(a)*distance, -1 + random()*3, Math.sin(a)*(distance - 24), a, width, h,
+    const a=i*tau/38, width=12+random()*21, h=7+random()*17, distance=MEADOW_BOUNDS.x+35+random()*38;
+    farRidges.push([Math.cos(a)*distance, -1 + random()*3, Math.sin(a)*(MEADOW_BOUNDS.z+35+random()*30), a, width, h,
       9 + random()*19, [0x728f87,0x839c8e,0x748a84,0x8ba494][i%4], .10*Math.sin(i)]);
   }
   batch(rockGeo,stone,farRidges,{name:'Distant ridgelines',reflect:false});
@@ -435,6 +438,8 @@ export function createMeadow(T, renderer, sun) {
       lastShadowX = lastShadowZ = Infinity;
     }
     const x = camera.position.x, z = camera.position.z;
+    const groundRange=[130,155,180][tier];
+    for(const tile of groundTiles)tile.mesh.visible=(tile.x-x)**2+(tile.z-z)**2<groundRange*groundRange;
     for (const { mesh,center,distance } of lod) {
       const range = distance[tier];
       if (!range) { mesh.visible = false; continue; }
@@ -445,7 +450,7 @@ export function createMeadow(T, renderer, sun) {
     for (const {high,low,center} of treeLod) {
       const range=distanceLimit+(high.visible?2:0);
       high.visible=(x-center.x)**2+(z-center.z)**2<range*range;
-      low.visible=!high.visible;
+      low.visible=!high.visible&&(x-center.x)**2+(z-center.z)**2<155*155;
     }
     wind.update(camera, tier, motionScale);
     butterflies.update(camera, tier);

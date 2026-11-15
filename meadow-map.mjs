@@ -1,7 +1,8 @@
+import {HABITATS,HABITAT_TRAILS,habitatAt} from './rpg-habitats.mjs';
 import {containVillage,inVillage,VILLAGE_BUILDINGS} from './rpg-village-layout.mjs';
 /* Open Meadow geometry and horizontal collision, shared with the Durable Object. */
-export const MAP_REVISION = 'meadow-3-rpg';
-export const MEADOW_BOUNDS = Object.freeze({ x: 136, z: 113 });
+export const MAP_REVISION = 'meadow-4-habitats';
+export const MEADOW_BOUNDS = Object.freeze({ x: 320, z: 190 });
 export const MEADOW_SPAWN = Object.freeze({ x: -24, z: 15, r: 2.06 });
 
 export const PONDS = [
@@ -27,6 +28,7 @@ export function meadowRandom(seed) {
 
 // The main circuit visits each landmark. A flatter shortcut links the spawn and ring.
 const trailRoutes = [
+  ...HABITAT_TRAILS,
   { width: 3.4, points: [[-24,15],[-14,15],[-8,12],[0,11],[10,13],[21,18],[29,26],[40,36]] },
   { width: 2.8, points: [[-24,15],[-39,13],[-54,3],[-71,-9],[-71,-19],[-79,-29],[-85,-44],[-74,-61],[-55,-68],[-26,-66],[-8,-61],[14,-60],[31,-62],[45,-69],[62,-67],[75,-59],[85,-42],[89,-23],[101,-10],[99,11],[90,27],[79,38],[74,52],[62,58],[46,54],[40,36]] },
   { width: 2.6, points: [[-71,-19],[-57,-16],[-40,-13],[-20,-9],[-12,-5],[-11,2],[-14,15]] },
@@ -84,7 +86,7 @@ export function pondBankHeight(p, radius) {
 
 const hills = [
   [-92,-40,37,33,7.3], [-63,-73,42,28,5.7], [5,-81,32,28,4.5], [91,-24,42,34,9.8],
-  [105,30,35,39,5.0], [42,84,47,28,6.1], [-45,61,45,30,5.3], [-105,37,32,45,6.4]
+  [105,30,35,39,5.0], [42,84,47,28,6.1], [-45,61,45,30,5.3], [-105,37,32,45,6.4], [152,-133,30,24,7], [210,128,42,23,6], [266,40,23,70,8], [171,-28,24,18,3.5]
 ];
 
 export function meadowHeight(x, z) {
@@ -124,8 +126,8 @@ const forestPatches = [
   [111,-28,24,26,12,.57]
 ];
 function canPlant(x, z, radius = 0) {
-  if(inVillage({x,z})||VILLAGE_BUILDINGS.some(b=>Math.hypot(x-b.x,z-b.z)<Math.max(b.w,b.d)*.8+4)||Math.hypot(x+24,z-15)<25 || (x>0&&x<126&&z>-106&&z<108))return false;
-  if (Math.hypot(x / 142, z / 119) > 1 || Math.hypot(x + 24, z - 15) < 5.5 ||
+  if(inVillage({x,z})||VILLAGE_BUILDINGS.some(b=>Math.hypot(x-b.x,z-b.z)<Math.max(b.w,b.d)*.8+4)||Math.hypot(x+24,z-15)<25 || habitatAt(x,z,-2))return false;
+  if (Math.hypot(x / MEADOW_BOUNDS.x, z / MEADOW_BOUNDS.z) > 1 || Math.hypot(x + 24, z - 15) < 5.5 ||
       Math.hypot(x, z) < 14 || trailAmount(x, z) > .17 ||
       PONDS.some(p => pondRadius(p, x, z) < 1.12)) return false;
   return trees.every(t => (t.x - x) ** 2 + (t.z - z) ** 2 > (3.3 + 1.7 * t.s + radius) ** 2);
@@ -140,9 +142,18 @@ for (const [x, z, rx, rz, count, fir] of forestPatches) {
     accepted++;
   }
 }
+// Sparse belts frame each habitat; keep its fighting space and connecting paths clear.
+for(const h of HABITATS){
+ if(['dunes','ash','crystal','stones','roost'].includes(h.theme))continue;
+ for(let i=0;i<10;i++){
+  const a=i*TAU/10+.21,tx=h.x+Math.cos(a)*22,tz=h.z+Math.sin(a)*22;
+  if(canPlant(tx,tz))trees.push({x:tx,z:tz,s:.65+landscapeRandom()*.4,form:h.theme==='bramble'?1:0});
+ }
+}
 export const MEADOW_TREES = trees.filter(t=>!inVillage(t)&&VILLAGE_BUILDINGS.every(b=>Math.hypot(t.x-b.x,t.z-b.z)>Math.max(b.w,b.d)*.8+4));
 
 export const MEADOW_BOULDERS = [
+ ...HABITATS.flatMap(h=>[.65,2.65,4.35].map((a,i)=>({x:h.x+Math.cos(a)*16.7,z:h.z+Math.sin(a)*16.7,r:['ruins','roost'].includes(h.theme)?1.35: .75,height:['ruins','roost'].includes(h.theme)?2.8:1.1}))).filter(p=>PONDS.every(pond=>pondRadius(pond,p.x,p.z)>1.4)&&trailAmount(p.x,p.z)<.15),
   { x: -12.8, z: -11, r: 1.48, height: 1.95 }, { x: 24, z: -10, r: 1.93, height: 2.65 },
   { x: -48, z: -34, r: 1.66, height: 1.65 }, { x: -54, z: -41, r: 1.4, height: 2.02 },
   { x: -74, z: -26, r: 1.27, height: 1.4 }, { x: 52, z: 52.9, r: 1.3, height: 1.85 },

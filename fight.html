@@ -1115,7 +1115,8 @@ const AUDIO_FILES = {
 };
 </script>
 <script type="module">
-import {createOriginalSlime,animateOriginalSlime} from './rpg-original-slime.mjs';
+import {createOriginalSlime,animateOriginalSlime,applyOriginalEyeSize,applyOriginalHurtFace} from './rpg-original-slime.mjs';
+import {smoothYaw} from './rpg-motion.mjs';
 import {sanitizeAppearance} from './rpg-appearance.mjs';
 'use strict';
 
@@ -2886,7 +2887,7 @@ function animateFighters(dt, time) {
     const dx = p.x - m.x, dz = p.z - m.z;
     m.x += dx * damp(mode === 'guest' ? 23 : 28, dt);
     m.z += dz * damp(mode === 'guest' ? 23 : 28, dt);
-    m.yaw += angleDiff(m.yaw, p.r) * damp(20, dt);
+    m.yaw = smoothYaw(m.yaw, p.r, dt, p.attackTime>0?24:13);
     const speed = clamp(Math.hypot(p.vx, p.vz) / 7.5, 0, 1.25);
     const dash = p.dashTime > 0;
     const hurt = p.stun > .035 || p.hit > .04;
@@ -2959,28 +2960,7 @@ function animateFighters(dt, time) {
     else m.fill.emissive.setHex(palette[p.color].dark);
     m.fill.emissiveIntensity = isSpit && fire ? .30 + puff * fire * .26 : p.hit > .08 ? .50 : isNova ? .34 + flex * .56 : .26;
 
-    const rival = state.p[1 - i];
-    const glance = mode === 'lobby' ? -.14 : clamp(angleDiff(m.yaw, Math.atan2(rival.x - p.x, rival.z - p.z)) * .26, -.24, .24);
-    const blink = (time + i * 1.71) % 4.06;
-    const grimace = hurt || !!knock;
-    for (const e of m.eyes) {
-      const wince = knock ? (knock.rest ? .14 : .91) : hurt ? (e.side === side ? .28 : .79) : 1;
-      e.eye.scale.set(1 + (knock && !knock.rest ? .11 : puff * .05), wince * (blink < .115 && !grimace ? .14 + .86 * Math.abs(blink - .057) / .057 : 1 + flex * .14), 1);
-      e.pupil.position.x = .018 + glance * .35 + (knock && !knock.rest ? Math.sin(time * 21 + e.side) * .056 : 0);
-      e.pupil.position.y = knock && !knock.rest ? .043 : -.016 + pose * .045;
-      e.pupil.scale.setScalar(knock && !knock.rest ? .63 : 1 - puff * .15);
-      e.brow.rotation.z = e.side * (grimace ? -.34 : isSlap || isNova ? .44 * (1 - settle) : puff * -.30);
-      e.brow.position.y = 1.395 + (knock && !knock.rest ? .075 : 0) + puff * .056;
-    }
-    m.smile.visible = !isSpit && !grimace && !isNova && !celebrating;
-    m.pout.visible = isSpit && age < at * .46 && !grimace;
-    m.mouth.visible = !m.smile.visible && !m.pout.visible;
-    m.mouth.scale.set(grimace ? 1.18 : isSpit ? .69 + recoil * .64 : 1.20, grimace ? .88 + (knock ? .25 : 0) : .72 + puff * .32 + recoil * .69, 1);
-    m.tongue.visible = !isSpit || grimace;
-    m.tongue.position.set(knock && knock.rest ? .07 : 0, knock && knock.rest ? -.14 : -.061, .064);
-    m.tongue.scale.y = knock && knock.rest ? .101 : .039;
-    m.teeth.visible = !isSpit && !knock;
-
+    // Face expressions are owned by the original rig below.
     const social = mode === 'public' ? meadowPose(p, dt, m) : null;
     if (social) {
       m.jelly.position.y += social.y;
@@ -3011,13 +2991,13 @@ function animateFighters(dt, time) {
     if(!knock){
       animateOriginalSlime(m.original,{time,speed,kind:p.attackTime>0?p.attack:'',progress:p.duration?clamp(1-p.attackTime/p.duration,0,1):1,combo:p.combo,hit:p.hit,phase:i});
       const look=sanitizeAppearance(p.appearance,p.color);m.root.scale.set(look.size*look.width,look.size*look.height,look.size*look.width);m.fill.color.set(look.tint);m.jelly.scale.multiplyScalar(physicalSize);
-      m.mouth.scale.x=1;m.mouth.scale.z=.35;m.mouth.visible=!m.smile.visible;m.crown.visible=look.crown;m.crown.rotation.z=0;
+      m.mouth.visible=true;m.crown.visible=look.crown;m.crown.rotation.z=0;
       for(const cheek of m.original.cheeks)cheek.visible=look.blush;
-      for(const eye of m.original.eyes){eye.scale.x=.75*look.eyes;eye.scale.y*=look.eyes;eye.scale.z=.5*look.eyes;}
+      applyOriginalEyeSize(m.original,look.eyes);if(hurt)applyOriginalHurtFace(m.original,look.eyes);
       for(const arm of m.original.arms)arm.pivot.scale.multiplyScalar(look.hands);
       m.shadow.material.opacity=.22;m.shadow.scale.setScalar(physicalSize*look.size*look.width);
       if(social){m.jelly.position.y+=social.y;m.jelly.scale.x*=social.width;m.jelly.scale.y*=social.height;m.jelly.scale.z*=social.width;m.jelly.rotation.y+=social.yaw;m.jelly.rotation.z+=social.roll;for(const a of m.original.arms){const gesture=social.arm+(a.side>0?social.wave:0);a.pivot.rotation.z-=a.side*gesture*.78;}}
-    }
+    }else{m.face.rotation.set(0,0,0);applyOriginalHurtFace(m.original,sanitizeAppearance(p.appearance,p.color).eyes);}
   }
 }
 

@@ -1,5 +1,5 @@
 import {sanitizeAppearance} from './rpg-appearance.mjs';
-import {containHuntingCreature,dryHuntingPoint} from './rpg-hunting.mjs';
+import {containHuntingCreature,dryHuntingPoint,inCreatureTerritory} from './rpg-hunting.mjs';
 import {ITEMS,STARTERS,FIRST_DROP,NPCS,SPECIES,TIERS,TOWN,inTown,XP_TO_NEXT,makeSpawns,migrateCharacter,statsFor} from './rpg-content.mjs';
 import {MEADOW_SPAWN,containMeadow} from './meadow-map.mjs';
 import {actionTiming} from './rpg-actions.mjs';
@@ -119,8 +119,8 @@ export class RPGWorld {
   this.pending=this.pending.filter(h=>h.at>now);
   for(const m of this.monsters){const s=SPECIES.find(s=>s.id===m.species),tier=TIERS.find(t=>t.level===m.tier);
    if(m.hp<=0){if(m.rewardPending){try{await this.reward(m);m.rewardPending=false;}catch{continue;}}if(now>=m.until){m.hp=m.maxHp;m.x=m.homeX;m.z=m.homeZ;m.phase='idle';m.generation++;m.damage.clear();}continue;}
-   let target=players.find(p=>p.id===m.target&&p.hp>0&&!inTown(p)&&dryHuntingPoint(p.x,p.z)&&dist(p,m)<22&&dist(m,{x:m.homeX,z:m.homeZ})<18);
-   if(!target){target=players.filter(p=>p.hp>0&&!inTown(p)&&dryHuntingPoint(p.x,p.z)&&dist(p,m)<(m.tier===1?6.5:9)).sort((a,b)=>dist(a,m)-dist(b,m))[0];m.target=target?.id||0;}
+   let target=players.find(p=>p.id===m.target&&p.hp>0&&!inTown(p)&&inCreatureTerritory(m,p.x,p.z)&&dryHuntingPoint(p.x,p.z)&&dist(p,m)<22&&dist(m,{x:m.homeX,z:m.homeZ})<18);
+   if(!target){target=players.filter(p=>p.hp>0&&!inTown(p)&&inCreatureTerritory(m,p.x,p.z)&&dryHuntingPoint(p.x,p.z)&&dist(p,m)<(m.tier===1?6.5:9)).sort((a,b)=>dist(a,m)-dist(b,m))[0];m.target=target?.id||0;}
    if(!target){m.phase='idle';const dx=m.homeX-m.x,dz=m.homeZ-m.z,len=Math.hypot(dx,dz);if(len>.3){m.x+=dx/len*dt*2;m.z+=dz/len*dt*2;containHuntingCreature(m);}continue;}
    const distance=dist(m,target),ranged=['line','lob','cone','bolt'].includes(s.pattern),reach=ranged?8:s.pattern==='slam'||s.pattern==='ring'?4.6:2.8;
    if(m.phase==='windup'&&now>=m.until){

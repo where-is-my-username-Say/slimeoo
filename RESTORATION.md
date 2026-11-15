@@ -16,7 +16,15 @@ Architecture retains the timber, colored roofs, plaster, signs and shop-specific
 
 ## Hunting areas
 
-Creatures are arranged into five habitats per tier rather than straight rows. Spawn selection excludes water and shore margins, paths, the village, the duel ring, obstacles and steep terrain. If a placement cannot be found it is skipped rather than falling back into water. Chasing, returning and lunging creatures are kept outside pond margins. Creature models use original slime anatomy plus wings, ears, shells, horns, foliage and other family details.
+The playable world bounds expand from 136 x 113 to 320 x 190 world-unit radii. Twenty-five named habitats each belong to one species, with separate home positions for its level 1, 5 and 10 residents. Territory rules keep pursuit inside that species' clearing. Spawn selection excludes water and shore margins, paths, the village, the duel ring, obstacles and steep terrain; an obstructed placement is skipped rather than falling back into water. Signs, tree belts, collidable rocks, small themed props and ground colors identify the areas. A numbered atlas lists every species and habitat; the minimap follows the player.
+
+Terrain tiles, rocks, trees and habitat scenery use distance limits so the larger map does not all render at once. Remote terrain uses fewer subdivisions. The binary multiplayer position format remains unchanged; the expanded bounds remain within its range.
+
+## Softer colors and smooth floating UI
+
+Village walls, roofs, floors and paths use muted stone, timber, sage, clay and plum colors. Sun and hemisphere light strength, exposure, sky glare and atmospheric scattering are reduced. Original character construction and camera controls remain intact.
+
+Floating labels previously projected only every 100 milliseconds. Names and health bars now project every rendered frame after refreshing the camera matrix; label decluttering runs separately every 180 milliseconds. Damage numbers use the same current camera matrix. Name text and health-bar widths only change when their values change.
 
 ## Interface
 
@@ -25,3 +33,9 @@ The menu is centered on the character preview and direct mode choices. The bag h
 ## Delivery
 
 No tests or browser playtests were run for this pass, as requested. The asset build only copies distribution files and does not prove runtime or visual correctness. Production was not deployed. Deploy the matching Worker before the frontend so village collision, enemy positions and appearance saves agree. Existing character keys, authentication verification and Durable Object namespace are retained. No private saves or OAuth secret files are included.
+
+## Face and turning follow-up
+
+Slime facing now eases along the shortest angle with the original exponential turn response. Local gameplay aim and network directions remain immediate, while the rendered local player, remote players, creatures, menu preview and duel/practice fighters turn smoothly. Attack turns use a faster response so the visual stays close to the authoritative hit direction.
+
+The original face geometries, colors, X/Y spacing and proportions are retained. Mouth, smile and cheek depth is corrected to sit on the curved dome rather than disappearing into it. Original idle/blink/spit poses reset every frame; eye highlights follow blinks and cosmetic eye size. Duel/practice no longer runs the old overhaul facial-expression block. No tests or browser playtests were run.

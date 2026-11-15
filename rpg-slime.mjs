@@ -1,5 +1,5 @@
 import * as T from './vendor/three.module.js';
-import {createOriginalSlime,animateOriginalSlime,reactOriginalSlime} from './rpg-original-slime.mjs';
+import {createOriginalSlime,animateOriginalSlime,reactOriginalSlime,applyOriginalEyeSize} from './rpg-original-slime.mjs';
 import {sanitizeAppearance} from './rpg-appearance.mjs';
 import {ITEMS} from './rpg-content.mjs';
 import {batchDetails} from './rpg-geometry.mjs';
@@ -41,7 +41,7 @@ export function createSlimeRig(color,role='player',compact=false,{part,weaponMod
    progress=Math.max(0,Math.min(1,progress));
    const hurt=Math.max(0,1-(time-hitAt)/.26);
    animateOriginalSlime(original,{time,speed:moving/7.5,kind,progress,combo,hit:hurt});
-   for(const eye of original.eyes){eye.scale.x=.75*appearance.eyes;eye.scale.y*=appearance.eyes;eye.scale.z=.5*appearance.eyes;}
+   applyOriginalEyeSize(original,appearance.eyes);
    for(const arm of original.arms)arm.pivot.scale.multiplyScalar(appearance.hands);
    if(wasAir>0&&air<=0)landAt=time;wasAir=air;const landing=Math.max(0,1-(time-landAt)/.2);
    if(air>0){body.scale.y*=1.10;body.scale.x*=.95;body.scale.z*=.95;}else if(landing){body.scale.y*=1-landing*.18;body.scale.x*=1+landing*.09;body.scale.z*=1+landing*.09;}
