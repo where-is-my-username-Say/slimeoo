@@ -58,7 +58,7 @@ export function createMeadowLighting(T, renderer, sun, direction) {
     sceneTarget.depthTexture.minFilter = sceneTarget.depthTexture.magFilter = T.NearestFilter;
     const floating=renderer.capabilities.isWebGL2&&renderer.extensions.has('EXT_color_buffer_float');
     scatterTarget = new T.WebGLRenderTarget(1, 1, { type:floating?T.HalfFloatType:T.UnsignedByteType,minFilter:T.LinearFilter, magFilter:T.LinearFilter, depthBuffer:false, stencilBuffer:false });
-    const steps = quality === 2 ? 48 : 28;
+    const steps = quality === 2 ? 32 : 20;
     const sunTexel = new T.Vector2();
     rays = new T.ShaderMaterial({
       vertexShader:fullscreenVertex, depthWrite:false, depthTest:false, toneMapped:false,
@@ -77,14 +77,14 @@ export function createMeadowLighting(T, renderer, sun, direction) {
         #include <packing>
         float litBySun(vec3 p) {
           vec4 coord = sunMatrix * vec4(p,1.);
-          if (any(lessThan(coord.xyz,vec3(0.))) || any(greaterThan(coord.xyz,vec3(1.)))) return .78;
+          if (any(lessThan(coord.xyz,vec3(0.))) || any(greaterThan(coord.xyz,vec3(1.)))) return 1.;
           float receiver = coord.z - .00065;
           float found = step(receiver, unpackRGBAToDepth(texture2D(shadowDepth,coord.xy)));
           ${quality === 2 ? `found = (2.*found
             + step(receiver,unpackRGBAToDepth(texture2D(shadowDepth,coord.xy+sunTexel*vec2(.84,.52))))
             + step(receiver,unpackRGBAToDepth(texture2D(shadowDepth,coord.xy-sunTexel*vec2(.84,.52)))))*.25;` : ''}
           float edge = min(min(coord.x,1.-coord.x),min(coord.y,1.-coord.y));
-          return mix(.78,found,smoothstep(.0,.08,edge));
+          return mix(1.,found,smoothstep(.0,.08,edge));
         }
         void main() {
           float surface = depthAt(vUv);
@@ -102,10 +102,10 @@ export function createMeadowLighting(T, renderer, sun, direction) {
             vec3 position = origin+ray*travel;
             float density = exp(-max(0.,position.y-origin.y+1.1)*.115);
             float visibility = litBySun(position);
-            integral += density*(.095 + .905*visibility)*exp(-travel*.019);
+            integral += density*visibility*exp(-travel*.019);
           }
-          float scatter = integral*stepLength*forwardScatter*.032;
-          gl_FragColor = vec4(clamp(scatter,0.,1.),surface/clipRange.y,0.,1.);
+          float scatter = integral*stepLength*forwardScatter*.012;
+          gl_FragColor = vec4(clamp(scatter,0.,.45),0.,0.,1.);
         }
       `
     });
@@ -127,10 +127,10 @@ export function createMeadowLighting(T, renderer, sun, direction) {
           for (int y=0;y<2;y++) {
             for (int x=0;x<2;x++) {
               vec2 corner=vec2(float(x),float(y));
-              vec2 sampleUv=(cell+corner+.5)/scatterSize;
+              vec2 sampleUv=clamp((cell+corner+.5)/scatterSize,.5/scatterSize,1.-.5/scatterSize);
               vec2 s=texture2D(scatterColor,sampleUv).rg;
               vec2 w=mix(1.-f,f,corner);
-              float depthWeight=1./(1.+abs(s.y*clipRange.y-surface)*.82);
+              float depthWeight=1./(1.+abs(depthAt(sampleUv)-surface)*.82);
               float importance=w.x*w.y*depthWeight;
               sum+=s.x*importance;weight+=importance;
             }

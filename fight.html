@@ -1102,7 +1102,7 @@ const AUDIO_FILES = {
   "swing": "./swing.mp3",
   "dodge": "./dodge.mp3",
   "splat": "./splat.mp3",
-  "spit-fx": "./spit-dry.mp3",
+  "spit-fx": "./spit-mouth-short.wav",
   "landing": "./landing.mp3",
   "nova-fx": "./nova-fx.mp3",
   "knockout": "./knockout.mp3",
@@ -1167,7 +1167,7 @@ const config = [
 ];
 const defaults = {
   sens: 1, sensY: 1, dyn: .35, smooth: .24, inv: false, floating: true, stickSize: 1, dead: .1, btn: 1, btnOp: 1,
-  assist: .32, hold: true, autoLock: true, fov: 56, dist: 7.25, shake: prefersReduced ? 0 : .85,
+  assist: .32, hold: true, autoLock: false, fov: 62, dist: 7, shake: prefersReduced ? 0 : .85,
   cinema: !prefersReduced, reduced: prefersReduced, vol: .85, music: .25, sfx: .90, haptic: true,
   quality: coarse ? 1 : 2, parts: 1, crowd: true, adaptive: false, dmg: true, vig: true, cross: true, fps: false, bot: 1
 };
@@ -1191,6 +1191,7 @@ for (const [, group] of config) {
     }
   }
 }
+if(!stored.restorationCamera){settings.fov=62;settings.dist=7;settings.autoLock=false;}settings.restorationCamera=1;writeStore('slimeRomeSettings',settings);
 if (readStore('slimeRomeSound', true) === false && stored.vol === undefined) settings.vol = 0;
 const savedProfile = readStore('slimeRomeProfile', {});
 let profile = {
@@ -1201,7 +1202,7 @@ let chosen = profile.color;
 $('playerName').value = profile.name;
 document.body.classList.toggle('touch', coarse);
 
-function emptyButtons() { return { slap: 0, spit: 0, dash: 0, nova: 0 }; }
+function emptyButtons() { return { slap: 0, spit: 0, dash: 0, nova: 0, jump: 0 }; }
 function neutralInput(ready = true) {
   return { x: 0, z: 0, aim: null, assist: 0, a: emptyButtons(), ready };
 }
@@ -2792,110 +2793,32 @@ function makeFighter(index) {
   tilt.add(jelly);
   jelly.add(face);
 
-  const fill = standard(0xffffff, { roughness: .28, metalness: .05, emissive: 0x102945, emissiveIntensity: .26 });
-  fill.onBeforeCompile = shader => {
-    shader.fragmentShader = shader.fragmentShader.replace('#include <emissivemap_fragment>', [
-      '#include <emissivemap_fragment>',
-      'float glaze=pow(1.0-clamp(dot(normal,normalize(vViewPosition)),0.,1.),2.4);',
-      'totalEmissiveRadiance+=diffuseColor.rgb*(.06+glaze*.38);',
-      'totalEmissiveRadiance+=vec3(.08,.065,.145)*glaze;'
-    ].join('\n'));
-  };
-  const highlight = new T.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: .66, depthWrite: false, toneMapped: false });
-  const body = addMesh(skinGeometry, fill, jelly);
-  body.castShadow = true;
-  body.receiveShadow = true;
-  addMesh(bellyGeometry, fill, jelly);
-  const shell = outline(body, 1.041);
-  shell.position.y = -.021;
-
-  const glint = ellipsoid(jelly, highlight, -.40, 1.51, .53, .25, .069, .023);
-  glint.rotation.set(-.70, -.38, .29);
-  const bead = ellipsoid(jelly, highlight, -.62, 1.37, .64, .066, .043, .017, smallSphere);
-  bead.rotation.y = -.46;
-  const backGlint = ellipsoid(jelly, highlight, .43, 1.43, -.57, .23, .056, .026);
-  backGlint.rotation.set(.62, -.38, -.21);
-  const backBead = ellipsoid(jelly, highlight, .65, 1.30, -.66, .062, .043, .018, smallSphere);
-  backBead.rotation.y = -.48;
-
-  const eyes = [];
-  for (const side of [-1, 1]) {
-    const eye = new T.Group();
-    eye.position.set(side * .338, 1.119, .91);
-    eye.rotation.y = side * .26;
-    face.add(eye);
-    ellipsoid(eye, eyeDark, 0, 0, .017, .26, .291, .116);
-    ellipsoid(eye, white, 0, .007, .072, .225, .247, .123);
-    const pupil = new T.Group();
-    pupil.position.set(.018, .003, .168);
-    eye.add(pupil);
-    ellipsoid(pupil, eyeDark, 0, 0, 0, .104, .145, .055, smallSphere);
-    ellipsoid(pupil, sparkle, -.030, .056, .043, .031, .038, .022, smallSphere);
-    ellipsoid(pupil, sparkle, .038, -.045, .041, .014, .018, .015, smallSphere);
-    const brow = ellipsoid(face, eyeDark, side * .351, 1.395, .738, .199, .052, .059, smallSphere);
-    brow.rotation.y = side * .32;
-    const cheek = ellipsoid(face, cheekMat, side * .65, .865, .889, .133, .066, .039, smallSphere);
-    cheek.rotation.y = side * .62;
-    eyes.push({ side, eye, pupil, brow });
+  const fill=new T.MeshToonMaterial({color:0x29977c});
+  const highlight=new T.MeshBasicMaterial({color:0xc9e7da,transparent:true,opacity:.4,depthWrite:false});
+  const body=addMesh(new T.SphereGeometry(1.15,24,18,0,TAU,0,Math.PI*.78),fill,jelly,0,.62,0);body.scale.set(1,.84,1);body.castShadow=true;body.receiveShadow=true;
+  ellipsoid(jelly,fill,0,.32,0,1.11,.35,1.11);
+  const shell=outline(body,1.025);shell.position.y=-.015;
+  ellipsoid(jelly,highlight,-.43,1.32,.72,.24,.064,.032);
+  const eyes=[];
+  for(const side of [-1,1]){
+    const eye=new T.Group();eye.position.set(side*.29,1.05,.97);face.add(eye);
+    ellipsoid(eye,eyeDark,0,0,0,.086,.155,.058,smallSphere);
+    const pupil=new T.Group();eye.add(pupil);ellipsoid(pupil,sparkle,-.038,.065,.055,.032,.032,.024,smallSphere);
+    const brow=new T.Group();face.add(brow);
+    ellipsoid(face,cheekMat,side*.49,.93,.92,.135,.049,.027,smallSphere);eyes.push({side,eye,pupil,brow});
   }
-  const mouth = new T.Group();
-  mouth.position.set(0, .783, 1.039);
-  face.add(mouth);
-  ellipsoid(mouth, mouthMat, 0, 0, 0, .225, .153, .072);
-  const tongue = ellipsoid(mouth, tongueMat, 0, -.061, .064, .105, .039, .031, smallSphere);
-  const teeth = ellipsoid(mouth, white, 0, .054, .059, .138, .041, .029, smallSphere);
-  const smile = curveTube([[-.183, .822, 1.033], [-.1, .767, 1.09], [0, .743, 1.108], [.11, .756, 1.088], [.188, .818, 1.032]], .026, mouthMat, face);
-  const pout = curveTube([[-.11, .776, 1.071], [0, .802, 1.107], [.11, .776, 1.071]], .026, mouthMat, face);
-
-  const crown = new T.Group();
-  crown.position.set(0, 1.53, .02);
-  crown.rotation.set(.09, 0, -.06);
-  jelly.add(crown);
-  const band = addMesh(new T.TorusGeometry(.60, .036, 7, 40), leather, crown);
-  band.rotation.x = -Math.PI / 2;
-  band.scale.y = 1.01;
-  for (const side of [-1, 1]) {
-    for (let i = 0; i < 5; i++) {
-      const a = .11 + i * .31;
-      const x = Math.cos(a) * .59 * side;
-      const z = Math.sin(a) * -.60 - .03;
-      const leaf = ellipsoid(crown, i % 2 ? goldMat : paleGold, x, .035 + i * .012, z, .087, .213, .038, smallSphere);
-      leaf.rotation.set(-.59 + i * .08, side * .32, -side * (.66 + i * .08));
-      outline(leaf, 1.12);
-    }
-  }
-  const buckle = ellipsoid(crown, goldMat, 0, .01, .606, .125, .105, .052, smallSphere);
-  outline(buckle, 1.10);
-  const rearTie = ellipsoid(crown, leather, 0, -.031, -.612, .115, .096, .057, smallSphere);
-  rearTie.rotation.z = .31;
-  for (const side of [-1, 1]) {
-    const tie = ellipsoid(crown, leather, side * .068, -.147, -.628, .049, .139, .040, smallSphere);
-    tie.rotation.z = side * .39;
-  }
-
-  const arms = [];
-  for (const side of [-1, 1]) {
-    const shoulder = new T.Group();
-    shoulder.position.set(side * .83, .62, .03);
-    jelly.add(shoulder);
-    const limb = ellipsoid(shoulder, fill, side * .24, 0, 0, .37, .158, .178);
-    outline(limb, 1.10);
-    const palm = new T.Group();
-    palm.position.set(side * .56, 0, 0);
-    shoulder.add(palm);
-    const hand = ellipsoid(palm, fill, 0, 0, 0, .267, .253, .143);
-    outline(hand, 1.09);
-    const palmSpot = ellipsoid(palm, highlight, -.027 * side, .035, .125, .118, .094, .028, smallSphere);
-    palmSpot.rotation.z = side * .18;
-    for (let f = 0; f < 3; f++) {
-      const digit = ellipsoid(palm, fill, (f - 1) * .138, .192 + (f === 1 ? .034 : 0), .015, .088, .145, .085, smallSphere);
-      digit.rotation.z = (1 - f) * .14;
-      outline(digit, 1.10);
-    }
-    const thumb = ellipsoid(palm, fill, -side * .235, .014, .041, .098, .139, .091, smallSphere);
-    thumb.rotation.z = side * .56;
-    outline(thumb, 1.11);
-    arms.push({ side, shoulder, palm });
+  const mouth=new T.Group();mouth.position.set(0,.89,1.01);face.add(mouth);ellipsoid(mouth,mouthMat,0,0,0,.12,.10,.042,smallSphere);
+  const smile=addMesh(new T.TorusGeometry(.10,.022,6,16,Math.PI),mouthMat,face,0,.89,.99);smile.rotation.z=Math.PI;
+  const pout=new T.Group(),tongue=new T.Group(),teeth=new T.Group();face.add(pout);mouth.add(tongue,teeth);
+  const crown=new T.Group();jelly.add(crown);
+  for(let i=0;i<7;i++){const a=(i-3)*.24;ellipsoid(crown,paleGold,Math.sin(a)*.62,1.58+Math.cos(a)*.08,.15,.072,.156,.042,smallSphere).rotation.z=-a*1.4;}
+  const arms=[];
+  for(const side of [-1,1]){
+    const shoulder=new T.Group();shoulder.position.set(side*.83,.75,.12);jelly.add(shoulder);
+    ellipsoid(shoulder,fill,side*.20,0,0,.42,.196,.196);
+    const palm=new T.Group();palm.position.set(side*.55,0,.1);shoulder.add(palm);ellipsoid(palm,fill,0,0,0,.30,.255,.132);
+    for(let f=0;f<3;f++)ellipsoid(palm,fill,(f-1)*.16,.24,.015,.085,.14,.081,smallSphere);
+    ellipsoid(palm,fill,-side*.29,.03,.02,.096,.15,.12,smallSphere);arms.push({side,shoulder,palm});
   }
 
   const dizzy = new T.Group();
@@ -2916,7 +2839,7 @@ const fighters = [makeFighter(0), makeFighter(1)];
 function setFighterColor(m, index) {
   if (m.inkColor === index) return;
   const color = palette[index] || palette[0];
-  m.fill.color.setHex(color.body);
+  m.fill.color.setHex([0x29977c,0xb95750,0x7253a6,0xa17b26][index]??color.body);
   m.fill.emissive.setHex(color.dark);
   m.highlight.color.setHex(color.light);
   m.inkColor = index;
@@ -3063,7 +2986,7 @@ function animateFighters(dt, time) {
     m.jelly.scale.multiplyScalar(physicalSize);
     m.jelly.rotation.set(dash ? .32 : recoil * -.20 - speed * .04, pose * side * -.34, pose * side * -.23 + breath * .5);
     m.face.rotation.x = puff * -.065 + recoil * -.10;
-    m.crown.rotation.z = -.06 + pose * -.22 * side + Math.sin(time * 4 + i) * .018 + m.wobble * .20;
+    m.crown.rotation.z = Math.sin(time*4+i)*.008;
     m.shadow.position.set(rootX, .024 + .002 * i, rootZ);
     m.shadow.scale.setScalar(physicalSize + (ragY + p.air) * .11);
     m.shadow.material.opacity = .67 / (1 + (ragY + p.air) * .7);
@@ -3107,16 +3030,11 @@ function animateFighters(dt, time) {
     }
     for (const arm of m.arms) {
       const strike = isSlap && arm.side === side;
-      const power = strike ? (anticipation * .45 + snap * (heavy ? .94 : .60)) * (1 - settle) : 0;
-      const ready = Math.sin(time * 4 + arm.side * .7 + i) * .07;
-      const swing = strike ? lerp(1.17 * anticipation, -1.56 - (age - at > .055 ? .47 * smooth(at + .055, at + .13, age) : 0), snap) * (1 - settle) : 0;
-      arm.shoulder.scale.set(.69 + power * .36, .76 + power * .37, .78 + power * .32);
-      arm.shoulder.position.y = .57 + (strike ? anticipation * (1 - settle) * (heavy ? .54 : .34) : 0) + flex * .34;
-      arm.shoulder.position.z = .035 + power * .40;
-      arm.shoulder.rotation.set(flex * -.56, arm.side * (swing + .09), arm.side * (.14 + ready + cheer * .82 + power * (heavy ? .47 : .24) - (dash ? .43 : 0)));
-      arm.palm.scale.setScalar(1 + power * ((heavy ? .88 : .55) + skillRank(p, 'power') * .16));
-      arm.palm.position.x = arm.side * (.56 + power * skillValue(p, 'reach', 'reach') * .68);
-      arm.palm.rotation.set(puff * -.3, arm.side * (-.25 + snap * power * .68), arm.side * (.25 - power * .67));
+      const wind=isSlap?Math.sin(Math.min(1,progress/.34)*Math.PI/2):0,release=isSlap?clamp((progress-.32)/.28,0,1):0,recovery=isSlap?clamp((progress-.62)/.38,0,1):0,strength=strike?Math.sin(progress*Math.PI):0;
+      arm.shoulder.scale.setScalar(.55+strength*.8);arm.shoulder.position.y=.75;arm.shoulder.position.z=strike?release*(1-recovery)*1.6:.10;
+      arm.shoulder.rotation.set(flex*-1.3,strike?arm.side*(wind*1.3-release*3)*(1-recovery):arm.side*.15,arm.side*(.12+Math.sin(time*4+i)*.06));
+      arm.palm.scale.setScalar(1+strength*skillRank(p,'power')*.10);arm.palm.position.x=arm.side*(.55+strength*skillValue(p,'reach','reach')*.68);
+      arm.palm.rotation.set(0,strike?-arm.side*.6:0,strike?-arm.side*.22:arm.side*.2);
       if (social) {
         const gesture = social.arm + (arm.side > 0 ? social.wave : 0);
         arm.shoulder.position.y += gesture * .32;
@@ -3570,6 +3488,7 @@ function drivePlayer(p, input, dt, air = p.air > 0 || p.vy > 0) {
 function advancePlayer(i, dt) {
   const p = state.p[i], input = inputs[i];
   for (const key of timers) p[key] = Math.max(0, p[key] - dt);
+  if(input.a.jump!==undefined&&input.a.jump!==consumed[i].jump){consumed[i].jump=input.a.jump;if(p.hp>0&&p.air<=.01&&p.vy<=0&&p.stun<=0){p.vy=6.6;p.air=.02;event('dash',p.x,p.z,{i,color:p.color});}}
   for (const name of actions) {
     const count = input.a[name];
     if (count !== consumed[i][name]) {
@@ -4556,20 +4475,15 @@ function aimCamera(dt, realDt) {
     const racing = own.dashTime > 0 ? 1 : 0;
     const range = Math.hypot(rival.x - own.x, rival.z - own.z);
     const close = view.lock && rival.active ? 1 - smooth(2.1, 6.8, range) : 0;
-    const back = settings.dist + racing * .62 - close * .52 + (own.size - 1) * 3.1;
+    const back = settings.dist + (own.size - 1) * 1.8;
     const fx = Math.sin(view.yaw), fz = Math.cos(view.yaw);
     const rx = -fz, rz = fx;
     view.anchorX = lerp(view.anchorX, selfModel.x, damp(21, dt));
     view.anchorZ = lerp(view.anchorZ, selfModel.z, damp(21, dt));
-    const shoulder = view.lock ? 1.48 + close * 2.85 : .98;
-    normalSpot.set(view.anchorX - fx * back + rx * shoulder, 2.68 + close * .58 + view.pitch * 3.8 + own.air * .40 + (own.size - 1) * 1.8,
+    const shoulder = .95;
+    normalSpot.set(view.anchorX - fx * back + rx * shoulder, 1.85 + Math.sin(view.pitch)*back + (own.size-1)*1.15,
       view.anchorZ - fz * back + rz * shoulder);
-    if (view.lock && rival.active) {
-      const lead = clamp(range * .67 + .16, 1.48, 8);
-      normalTarget.set(view.anchorX + fx * lead, 1.12 + rival.air * .43 + own.air * .16, view.anchorZ + fz * lead);
-    } else {
-      normalTarget.set(view.anchorX + fx * 17, 1.05 - Math.tan(view.pitch - .14) * 12, view.anchorZ + fz * 17);
-    }
+    normalTarget.set(view.anchorX+fx*18,1.1-Math.sin(view.pitch)*5,view.anchorZ+fz*18);
     const ownGround = openMeadowActive() ? meadowMap.meadowHeight(view.anchorX, view.anchorZ) : 0;
     normalSpot.y += ownGround;
     normalTarget.y += openMeadowActive() && view.lock && rival.active ? meadowMap.meadowHeight(rival.x, rival.z) : ownGround;
@@ -4668,13 +4582,13 @@ function trigger(action) {
       return;
     }
   }
-  inputCounts[action]++;
+  if(action==='jump')inputCounts.jump=(inputCounts.jump+1)%128;else inputCounts[action]++;
   if (action === 'slap' || action === 'spit') lastRepeat[action] = clock;
   if (mode === 'guest') {
-    predictAttack(action);
+    if(action!=='jump')predictAttack(action);
     tickNet(performance.now(), true);
   } else if (mode === 'public') {
-    predictPublicAttack(action);
+    if(action!=='jump')predictPublicAttack(action);
     sendRoomInput(true);
   }
 }
@@ -4703,7 +4617,7 @@ function repeatInput() {
   }
 }
 
-const KEY_ACTION = { j: 'slap', ' ': 'slap', e: 'spit', q: 'nova', shift: 'dash' };
+const KEY_ACTION = { j: 'slap', ' ': 'jump', e: 'spit', q: 'nova', shift: 'dash' };
 const MOVE_KEYS = ['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'];
 addEventListener('keydown', event => {
   if (event.key === 'Escape' && !$('quickChatBar').hidden) { closeQuickChat(); event.preventDefault(); return; }
@@ -4730,12 +4644,14 @@ addEventListener('keydown', event => {
     return;
   }
   const key = event.key.toLowerCase();
-  if (key === ' ' && event.target.closest?.('button')) return;
+  if(key==='tab'){event.preventDefault();if(!event.repeat){view.shiftLock=!view.shiftLock;if(view.shiftLock){lockOn(false);try{canvas.requestPointerLock()?.catch(()=>{});}catch{}}else if(document.pointerLockElement)document.exitPointerLock();}return;}
   if (key === 'r' && !event.repeat) lockOn(mode === 'public' ? !publicRoom.locked : !view.lock);
   if (MOVE_KEYS.includes(key) || KEY_ACTION[key]) event.preventDefault();
   keys.add(key);
   if (!event.repeat && KEY_ACTION[key]) trigger(KEY_ACTION[key]);
 });
+document.addEventListener('pointerlockchange',()=>{if(document.pointerLockElement!==canvas)view.shiftLock=false;});
+document.addEventListener('mousemove',event=>{if(view.shiftLock&&document.pointerLockElement===canvas){view.targetYaw=(view.targetYaw-event.movementX*.0041*settings.sens)%TAU;view.targetPitch=clamp(view.targetPitch+event.movementY*.0032*settings.sensY*(settings.inv?-1:1),-.15,.49);}});
 addEventListener('keyup', event => keys.delete(event.key.toLowerCase()));
 addEventListener('blur', resetInputs);
 canvas.addEventListener('contextmenu', event => event.preventDefault());
@@ -5761,7 +5677,7 @@ function encodeInput(input, sequence) {
   const v = new DataView(buffer);
   v.setUint8(0, inputTag);
   v.setUint8(1, protocolTag);
-  v.setUint8(2, input.ready ? 1 : 0);
+  v.setUint8(2, (input.ready?1:0)|((input.a.jump||0)%128<<1));
   v.setUint8(3, Math.round(input.assist * 255));
   v.setUint32(4, sequence);
   v.setInt16(8, Math.round(input.x * 16384));
@@ -5782,7 +5698,7 @@ function readFastInput(buffer) {
   const aim = v.getInt16(12);
   const a = {};
   actions.forEach((key, i) => { a[key] = v.getUint16(14 + i * 2); });
-  remoteReady = v.getUint8(2) === 1;
+  a.jump=v.getUint8(2)>>1;remoteReady = (v.getUint8(2)&1) === 1;
   inputs[1] = {
     x: clamp(v.getInt16(8) / 16384, -1, 1),
     z: clamp(v.getInt16(10) / 16384, -1, 1),
@@ -6068,6 +5984,7 @@ function readCommand(data) {
   for (const key of actions) {
     a[key] = Number.isSafeInteger(data.a?.[key]) && data.a[key] >= 0 ? data.a[key] : inputs[1].a[key];
   }
+  a.jump=Number.isSafeInteger(data.a?.jump)&&data.a.jump>=0?data.a.jump%128:(inputs[1].a.jump||0);
   if (seq && seq < lastRemoteSequence) return;
   remoteReady = data.ready !== false;
   inputs[1] = {
@@ -6251,12 +6168,12 @@ function playSound(kind, x = 0, z = 0, heavy = false) {
   const source = ctx.createBufferSource();
   const gain = ctx.createGain();
   const level = {
-    tap: .49, smack: heavy ? 1.00 : .84, slap: heavy ? .66 : .43, chargeSpit: .25, spit: .68, splat: .71,
+    tap: .49, smack: heavy ? 1.00 : .84, slap: heavy ? .66 : .43, chargeSpit: .25, spit: .48, splat: .40,
     dash: .53, perfect: .65, return: .63, chargeNova: .39, nova: .93, ko: .83,
     bounce: .56, upgrade: .64, wave: .57, start: .71, tick: .38
   }[kind] ?? .54;
   source.buffer = buffer;
-  source.playbackRate.value = kind === 'smack' ? (heavy ? .88 : .97) + Math.random() * .09 :
+  source.playbackRate.value = kind === 'spit' ? 1 : kind === 'smack' ? (heavy ? .88 : .97) + Math.random() * .09 :
     kind === 'upgrade' ? 1 + (Number(heavy) || 0) * .055 : kind === 'chargeSpit' ? 1.52 : kind === 'wave' ? 1.14 : .97 + Math.random() * .06;
   gain.gain.value = clamp(1 - d / 39, .10, 1) * level;
   source.connect(gain);
@@ -7738,7 +7655,7 @@ $('practiceFormat').onchange = () => {
   const sandbox = $('practiceFormat').value === 'sandbox';
   $('practiceBouts').disabled = $('practiceSeconds').disabled = sandbox;
 };
-$('openMeadow').onclick = () => requestEnter('public');
+$('openMeadow').onclick = () => { location.href='./'; };
 setInterval(refreshRoomLobby, 6000);
 $('roomBuild').onclick = $('fieldBuild').onclick = () => openBuild('room');
 $('buildSave').onclick = () => finishBuild(true);
@@ -7811,6 +7728,10 @@ for (const button of swatches) button.onclick = () => {
   state.p[1].color = (chosen + 1) % 4;
   updateSwatches();
 };
+const launchMode=new URLSearchParams(location.search).get('mode');
+if(launchMode==='practice'&&!parseRoom(location.hash))setTimeout(()=>{ $('practiceSetup').click(); },0);
+if(launchMode==='friend'&&!parseRoom(location.hash))setTimeout(()=>{ $('host').click(); },0);
+if(launchMode==='join')setTimeout(()=>{ $('joinCode').focus();$('joinCode').scrollIntoView({block:'center'});setStatus('Paste your friend’s room code or invite link, then tap Join.'); },0);
 const inviteCode = parseRoom(location.hash);
 if (inviteCode) {
   $('joinCode').value = inviteCode;

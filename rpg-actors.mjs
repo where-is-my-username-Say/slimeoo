@@ -1,3 +1,4 @@
+import {createSlimeRig} from './rpg-slime.mjs';
 import * as T from './vendor/three.module.js';
 import {SPECIES,TIERS,ITEMS} from './rpg-content.mjs';
 const sphere=new T.SphereGeometry(1,14,10),ball=new T.SphereGeometry(1,8,6),box=new T.BoxGeometry(1,1,1),cone=new T.ConeGeometry(1,1,8),cyl=new T.CylinderGeometry(1,1,1,8),torus=new T.TorusGeometry(1,.14,6,20);
@@ -13,26 +14,7 @@ export function weaponModel(id){const item=ITEMS[id];const root=new T.Group();if
  if(item.kind==='spell'){part(root,cyl,'#8c6956',[0,.3,0],[.065,1.5,.065]);part(root,new T.OctahedronGeometry(.28),color,[0,1.15,0]);const ring=part(root,torus,'#e2bd74',[0,1.15,0],[.4,.4,.4],.5);ring.rotation.x=.4;}
  return root;
 }
-export function slimeModel(color='#a8d5a4',role='player',compact=false){
- const root=new T.Group(),body=new T.Group();root.add(body);const skin=part(body,sphere,color,[0,.78,0],[.79,.74,.7]);skin.material=material(color,.08);skin.castShadow=true;skin.receiveShadow=true;
- part(body,sphere,color,[0,.22,.02],[.96,.22,.78]);eye(body,-.23,1.0,.65,.12);eye(body,.23,1.0,.65,.12);
- const mouth=part(body,torus,'#3e5b51',[0,.75,.69],[.11,.07,.05]);mouth.rotation.z=Math.PI;
- part(body,sphere,'#e8f8d8',[-.29,1.29,.35],[.23,.055,.055]);
- const hand=new T.Group();hand.position.set(.9,.63,.1);body.add(hand);part(hand,sphere,color,[0,0,0],[.22,.22,.22]);
- const left=new T.Group();left.position.set(-.9,.63,.1);body.add(left);part(left,sphere,color,[0,0,0],[.2,.2,.2]);
- const kit=new T.Group();hand.add(kit);const armorKit=new T.Group();body.add(armorKit);let equipped='',armored='';
- if(role==='hammer'){part(body,box,'#694d42',[0,.55,.64],[.7,.65,.06]);part(hand,box,'#5c4d4a',[0,.45,0],[.48,.23,.25],.6);part(hand,cyl,'#7e6554',[0,.12,0],[.04,.6,.04]);}
- else if(role==='stir'){part(body,sphere,'#e8e3cc',[0,1.42,0],[.55,.16,.5]);part(hand,cyl,'#b89a69',[0,.26,0],[.04,.7,.04]);}
- else if(role==='string'){part(body,cone,'#8b7846',[0,1.51,0],[.66,.4,.55]);kit.add(weaponModel('reedbow'));}
- else if(role==='levitate'){part(body,cone,'#8f79b3',[0,1.75,0],[.5,.95,.5]);part(body,torus,'#dbc57f',[0,1.35,0],[.62,.62,.62]).rotation.x=Math.PI/2;kit.add(weaponModel('dewspell'));}
- else if(role==='wave'){part(body,box,'#a3b29c',[0,1.46,0],[.6,.1,.5]);part(body,cone,'#6e9a78',[0,1.65,0],[.5,.4,.5]);}
- else if(role==='read'){part(left,box,'#9e7c56',[0,.1,.2],[.46,.57,.08]);part(body,sphere,'#d4c39b',[0,1.4,0],[.57,.12,.48]);}
- else if(role==='count'){part(body,torus,'#d6b867',[-.23,1.0,.71],[.17,.17,.17],.5);part(left,box,'#976f4e',[0,.15,.1],[.4,.3,.28]);}
- else if(role==='bow')part(body,cone,'#d1a1b6',[0,1.48,0],[.54,.35,.45]);
- if(compact){const meshes=[];body.updateMatrixWorld(true);body.traverse(m=>{if(m.isMesh&&m.parent!==hand)meshes.push(m);});if(!crowdGeometry.has(color)){const positions=[],normals=[],colors=[];for(const mesh of meshes){const g=mesh.geometry.index?mesh.geometry.toNonIndexed():mesh.geometry.clone();g.applyMatrix4(mesh.matrixWorld);positions.push(...g.attributes.position.array);normals.push(...g.attributes.normal.array);const c=mesh.material.color;for(let i=0;i<g.attributes.position.count;i++)colors.push(c.r,c.g,c.b);g.dispose();}const g=new T.BufferGeometry();g.setAttribute('position',new T.Float32BufferAttribute(positions,3));g.setAttribute('normal',new T.Float32BufferAttribute(normals,3));g.setAttribute('color',new T.Float32BufferAttribute(colors,3));g.computeBoundingSphere();crowdGeometry.set(color,g);}for(const mesh of meshes)mesh.parent.remove(mesh);const skin=new T.Mesh(crowdGeometry.get(color),crowdMaterial);skin.castShadow=true;skin.receiveShadow=true;body.add(skin);}
- return {root,body,hand,left,kit,setColor(next){if(next===color||compact)return;const previous=[material(color),material(color,.08)];body.traverse(m=>{if(m.isMesh&&previous.includes(m.material))m.material=material(next,m.material.metalness);});color=next;},setArmor(id){if(role!=='player'||id===armored)return;armorKit.clear();const item=ITEMS[id];if(item){part(armorKit,box,item.color,[0,.45,.61],[.67,.39,.13]);if(item.level>=5)for(const side of [-1,1])part(armorKit,sphere,item.color,[side*.62,.86,.12],[.27,.18,.3]);if(item.level>=10)part(armorKit,cone,item.color,[0,.6,-.5],[.8,.9,.3]);}armored=id;},setWeapon(id){if(role!=='player'||id===equipped)return;for(const child of [...kit.children]){child.traverse(m=>{if(m.geometry?.type==='TubeGeometry')m.geometry.dispose();});kit.remove(child);}kit.add(weaponModel(id));kit.rotation.z=-.6;equipped=id;},animate(t,moving=0,action='',emote=0){body.scale.set(1+Math.sin(t*5)*.025,1-Math.sin(t*5)*.025,1);body.position.y=Math.abs(Math.sin(t*(moving?9:2)))*(moving?.15:.035);hand.rotation.x=action?-1.8+Math.sin(t*25)*.7:role==='hammer'?Math.sin(t*4)*1.0:role==='wave'?Math.sin(t*3)*.7-.8:role==='string'?Math.sin(t*2)*.2:role==='stir'?Math.sin(t*3)*.4:0;hand.rotation.z=role==='levitate'?.4+Math.sin(t)*.15:0;left.rotation.z=role==='read'?-.2:Math.sin(t*2)*.12;
- if(role==='levitate')body.position.y+=.18+Math.sin(t*2)*.12;if(role==='bow')body.rotation.x=Math.sin(t*1.4)*.15;if(role==='read'){body.rotation.x=-.05+Math.sin(t*1.4)*.04;left.rotation.x=.2+Math.sin(t*1.5)*.05;}if(role==='count'){hand.rotation.z=.4+Math.sin(t*5)*.2;left.rotation.x=Math.sin(t*5)*.2;}if(emote){body.rotation.z=Math.sin(t*7)*.15;if(emote===3)hand.rotation.x=-1.6+Math.sin(t*8)*.4;if(emote===4)root.rotation.y+=.08;}else body.rotation.z=0;}};
-}
+export function slimeModel(color='#29977c',role='player',compact=false){return createSlimeRig(color,role,compact,{part,weaponModel});}
 export function enemyModel(speciesId,tierLevel){const s=SPECIES.find(s=>s.id===speciesId),tier=TIERS.find(t=>t.level===tierLevel),root=new T.Group(),rig=new T.Group();root.add(rig);const c=s.color,dark='#48514c',legs=[],wings=[],extras=[];let body;
  const shape=(geo,col,p,sz)=>part(rig,geo,col,p,sz);const limb=(x,z,len=.5)=>{const l=shape(cyl,dark,[x,.35,z],[.08,len,.08]);legs.push(l);return l;};
  const quadruped=['boar','fox','wolf','ram','croc'].includes(s.form);

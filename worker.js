@@ -1,6 +1,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import { MAP_REVISION, MEADOW_SPAWN, containMeadow, meadowWaterPace } from './meadow-map.mjs';
 import { RPGWorld } from './rpg-server.mjs';
+import {ACTION_CODES} from './rpg-actions.mjs';
 import { AccountAuth } from './google-auth.mjs';
 
 const CAP=50, PROTOCOL=2, INPUT=54, STATE=55, PLAYER_BYTES=33;
@@ -170,10 +171,10 @@ export class GameRoom extends DurableObject {
         v.setUint16(o,p.id);num(o+2,p.x,100);num(o+4,p.z,100);num(o+6,wrap(p.r),10000);
         num(o+8,p.vx,300);num(o+10,p.vz,300);num(o+12,p.kx,300);num(o+14,p.kz,300);
         v.setUint16(o+16,Math.round(p.hp*10));v.setUint8(o+18,Math.round(p.en));
-        v.setUint8(o+19,({slap:1,spit:2,nova:3}[p.attack]||0));
+        v.setUint8(o+19,ACTION_CODES[p.attack]||0);
         timer(o+20,p.attackTime);timer(o+21,p.duration);timer(o+22,p.contactTime);
         timer(o+23,p.dashTime);timer(o+24,p.air);timer(o+25,p.dash);
-        timer(o+26,p.stun);timer(o+27,0);v.setUint8(o+28,0);v.setUint8(o+29,0);
+        timer(o+26,p.stun);timer(o+27,0);v.setUint8(o+28,p.combo||0);v.setUint8(o+29,0);
         v.setUint8(o+30,p.emote||0);v.setUint16(o+31,Math.round(bounded(p.emoteAge%40,0,40)*1000));o+=PLAYER_BYTES;
     }
     for(const receiver of players){

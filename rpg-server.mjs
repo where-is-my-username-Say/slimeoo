@@ -1,5 +1,6 @@
 import {ITEMS,STARTERS,FIRST_DROP,NPCS,SPECIES,TIERS,TOWN,inTown,XP_TO_NEXT,makeSpawns,migrateCharacter,statsFor} from './rpg-content.mjs';
 import {MEADOW_SPAWN,containMeadow} from './meadow-map.mjs';
+import {actionTiming} from './rpg-actions.mjs';
 const send=(p,m)=>{if(m.t==='rpg.world'&&p.ws.bufferedAmount>262144)return;try{p.ws.send(JSON.stringify(m));}catch{}};
 const dist=(a,b)=>Math.hypot(a.x-b.x,a.z-b.z);
 const inDuel=p=>Math.hypot(p.x,p.z)<=8.8;
@@ -42,22 +43,32 @@ export class RPGWorld {
    }else if(m.t==='rpg.jump'){
     if(p.hp<=0||now<(p.jumpReady||0))fail('Wait until you land.');p.air=.7;p.jumpReady=now+750;this.broadcast({t:'rpg.fx',kind:'jump',who:p.id,x:p.x,z:p.z});
    }else if(m.t==='rpg.gesture'){
-    if(!['slap','spit'].includes(m.kind)||p.hp<=0)fail('Cannot act now.');if(now<(p.gestureReady||0))fail('Recovering.');p.gestureReady=now+(m.kind==='slap'?550:850);const reach=m.kind==='slap'?3.8:13,power=m.kind==='slap'?Math.max(4,Math.round(statsFor(c).power*.65)):Math.max(3,Math.round(statsFor(c).power*.55));
-    const target=this.monsters.find(q=>q.id===m.target&&q.hp>0),rival=this.players.get(Number(m.targetPlayer));
-    p.attack=m.kind;p.attackTime=m.kind==='slap'?.35:.48;p.duration=p.attackTime;
-    this.broadcast({t:'rpg.fx',kind:m.kind,who:p.id,target:target?.id,x:p.x,z:p.z,tx:target?.x??(p.x+Math.sin(p.r)*reach),tz:target?.z??(p.z+Math.cos(p.r)*reach)});
-    if(target&&!inTown(p)&&dist(p,target)<=reach)this.pending.push({at:now+180,p:p.id,monster:target.id,generation:target.generation,power,weapon:'gesture',reach});
-    if(rival?.joined&&rival.id!==p.id&&inDuel(p)&&inDuel(rival)&&dist(p,rival)<=reach)this.pending.push({at:now+180,p:p.id,duel:rival.id,power,reach});
+    if(!['slap','spit'].includes(m.kind)||p.hp<=0)fail('Cannot act now.');if(now<Math.max(p.gestureReady||0,p.rpgAttackUntil||0))fail('Recovering.');
+    if(Number.isFinite(m.aim))p.r=Math.atan2(Math.sin(m.aim),Math.cos(m.aim));
+    p.combo=m.kind==='slap'&&now<(p.chainUntil||0)?((p.combo||0)+1)%3:0;p.chainUntil=now+1150;
+    const timing=actionTiming(m.kind,p.combo);p.gestureReady=now+(m.kind==='slap'?[430,460,640][p.combo]:620);
+    const reach=m.kind==='slap'?3.8:13,power=m.kind==='slap'?Math.max(4,Math.round(statsFor(c).power*.65)):Math.max(3,Math.round(statsFor(c).power*.55));
+    const aimed=q=>q&&q.hp>0&&dist(p,q)<=reach&&Math.abs(Math.atan2(Math.sin(Math.atan2(q.x-p.x,q.z-p.z)-p.r),Math.cos(Math.atan2(q.x-p.x,q.z-p.z)-p.r)))<(m.kind==='slap'?1.05:.32);
+    const selected=this.monsters.find(q=>q.id===m.target),selectedRival=this.players.get(Number(m.targetPlayer));
+    const rival=aimed(selectedRival)&&selectedRival.id!==p.id?selectedRival:this.roster().filter(q=>q!==p&&aimed(q)).sort((a,b)=>dist(p,a)-dist(p,b))[0];
+    const target=aimed(selected)?selected:!rival?this.monsters.filter(aimed).sort((a,b)=>dist(p,a)-dist(p,b))[0]:null;
+    const destination=target||rival,tx=destination?.x??p.x+Math.sin(p.r)*reach,tz=destination?.z??p.z+Math.cos(p.r)*reach;
+    const travel=m.kind==='spit'?Math.hypot(tx-p.x,tz-p.z)/24:0;
+    p.attack=m.kind;p.attackTime=timing.duration;p.duration=timing.duration;p.contactTime=timing.contact;
+    this.broadcast({t:'rpg.fx',kind:m.kind,action:m.kind,op:m.op,combo:p.combo,duration:timing.duration,contact:timing.contact,travel,who:p.id,target:target?.id,x:p.x,z:p.z,r:p.r,tx,tz});
+    const at=now+(timing.contact+travel)*1000;
+    if(target&&!inTown(p))this.pending.push({at,p:p.id,monster:target.id,generation:target.generation,power,weapon:'gesture',reach});
+    if(rival?.joined&&inDuel(p)&&inDuel(rival))this.pending.push({at,p:p.id,duel:rival.id,power,reach});
    }else if(m.t==='rpg.attack'){
-    const monster=this.monsters.find(q=>q.id===m.target);if(!monster||monster.hp<=0)fail('Choose a living creature.');if(inTown(p)||p.hp<=0)fail('Leave the safe town to hunt.');if(now<p.rpgAttackUntil)fail('Recovering from your last attack.');
+    const monster=this.monsters.find(q=>q.id===m.target);if(!monster||monster.hp<=0)fail('Choose a living creature.');if(inTown(p)||p.hp<=0)fail('Leave the safe town to hunt.');if(now<Math.max(p.rpgAttackUntil,p.gestureReady||0))fail('Recovering from your last attack.');
     const weapon=ITEMS[c.gear.weapon],kind=weapon.kind,reach=kind==='sword'?3.8:kind==='bow'?weapon.id==='thornbow'?21:18:15;
     if(dist(p,monster)>reach)fail('Move closer to your target.');const focus=m.focus===true;
     if(focus&&!c.skills.includes('focus'))fail('Reach level 2 to learn Focus.');if(focus&&now<p.rpgFocusUntil)fail('Focus is recovering.');
     const cost=(kind==='spell'?weapon.level>=10?8:5:0)+(focus?12:0);if(p.mana<cost)fail('Not enough mana.');p.mana-=cost;
     const recovery=kind==='sword'?.62:kind==='bow'?.86:1.0;p.rpgAttackUntil=now+recovery*1000;if(focus)p.rpgFocusUntil=now+8000;
-    p.r=Math.atan2(monster.x-p.x,monster.z-p.z);p.attack=kind==='spell'?'nova':kind==='bow'?'spit':'slap';p.attackTime=recovery;p.duration=recovery;
-    this.pending.push({at:now+(kind==='sword'?160:kind==='bow'?310:400),p:p.id,monster:monster.id,generation:monster.generation,power:Math.round(statsFor(c).power*(focus?1.75:1)),weapon:weapon.id,reach});
-    this.broadcast({t:'rpg.fx',kind:'attack',who:p.id,target:monster.id,weapon:weapon.id,focus,x:p.x,z:p.z,tx:monster.x,tz:monster.z});
+    p.r=Math.atan2(monster.x-p.x,monster.z-p.z);p.attack=kind==='spell'?'nova':kind;p.combo=0;const timing=actionTiming(p.attack),travel=kind==='sword'?0:dist(p,monster)/(kind==='bow'?36:24);p.attackTime=timing.duration;p.duration=timing.duration;p.contactTime=timing.contact;
+    this.pending.push({at:now+(timing.contact+travel)*1000,p:p.id,monster:monster.id,generation:monster.generation,power:Math.round(statsFor(c).power*(focus?1.75:1)),weapon:weapon.id,reach});
+    this.broadcast({t:'rpg.fx',kind:'attack',action:p.attack,op:m.op,duration:timing.duration,contact:timing.contact,travel,who:p.id,target:monster.id,weapon:weapon.id,focus,x:p.x,z:p.z,r:p.r,tx:monster.x,tz:monster.z});
    }else if(m.t==='rpg.dodge'){
     if(p.hp<=0||now<(p.rpgDashReady||0))fail('Dodge is recovering.');const angle=Number.isFinite(m.angle)?m.angle:p.r;p.kx=Math.sin(angle)*17;p.kz=Math.cos(angle)*17;p.dashTime=.22;p.rpgDodgeUntil=now+350;p.rpgDashReady=now+1400;this.broadcast({t:'rpg.fx',kind:'dodge',who:p.id,x:p.x,z:p.z});
    }else if(m.t==='rpg.equip'){

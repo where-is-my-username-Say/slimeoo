@@ -1,15 +1,9 @@
-# GitHub / Vercel files
+# Slimoo changed-files upload
 
-Upload the **contents** of this folder to the root of:
+This folder contains only source/assets that differ from the previous GitHub-Vercel package, plus required new files. It is a patch for the existing repository, not a standalone replacement project.
 
-https://github.com/where-is-my-username-Say/slimeoo
+Upload these files to the matching paths in https://github.com/where-is-my-username-Say/slimeoo . Replace files with the same names; keep all other repository files. Do not upload the outer GitHub-Vercel folder.
 
-Do not upload the outer `GitHub-Vercel` directory as a nested folder. `package.json`, `index.html` and `vercel.json` belong at the repository root. Replace the older versions of those files.
+Deploy the matching Cloudflare Worker first, then let Vercel build the frontend. Keep GAME_ROOM, GameRoom and the existing v1 migration. Backend Google verification and save endpoints must be deployed together with these frontend changes.
 
-Vercel configuration is included: `npm run build` → `dist`. The displayed name is **Slimoo**; the registered website address remains https://slimeoo-plum.vercel.app/.
-
-Google login is configured with the public Web Client ID. Publish the matching Cloudflare Worker as described in `GOOGLE-SETUP.md` before publishing the frontend; a frontend-only upload cannot add the login/save endpoints to the existing backend.
-
-This directory intentionally contains no private save database, player session data, downloaded OAuth secret JSON, `node_modules`, or Git credentials. The local save directory is `D:\SlimooData\v3`, outside this upload folder. Do not upload that data directory.
-
-For a local playtest, run `START-SLIMOO.cmd`. Local saves continue using `D:\SlimooData`, so replacing this code folder does not reset them.
+No private saves, OAuth JSON, credentials, node_modules or local runtime state are included. The original reference and D:\SlimooData\v3 are untouched. Final repairs have not been tested, as requested. See RESTORATION.md.
